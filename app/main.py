@@ -5,6 +5,7 @@ from fastapi import Depends, FastAPI, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
+from app.admin import require_admin
 from app.db import get_connection, transaction
 from app.identity import Identity, require_identity
 from app.seed_data import QUICK_ADDS, thumbnail_for
@@ -163,3 +164,42 @@ def toggle_vote(
         "SELECT COUNT(*) AS c FROM votes WHERE song_id = ?", (song_id,)
     ).fetchone()["c"]
     return {"id": song_id, "did_i_vote": did_i_vote, "votes": votes}
+
+
+@app.post("/api/play")
+def play(_: None = Depends(require_admin)) -> dict:
+    conn = get_connection()
+    rows = conn.execute(
+        """
+        SELECT s.id, s.youtube_id, s.title, s.thumbnail_url,
+               COUNT(v.voter_id) AS votes
+        FROM songs s
+        LEFT JOIN votes v ON v.song_id = s.id
+        GROUP BY s.id
+        ORDER BY votes DESC, s.added_at ASC
+        LIMIT 4
+        """
+    ).fetchall()
+    return {
+        "queue": [
+            {
+                "id": row["id"],
+                "youtube_id": row["youtube_id"],
+                "title": row["title"],
+                "thumbnail_url": row["thumbnail_url"],
+                "votes": row["votes"],
+            }
+            for row in rows
+        ]
+    }
+
+
+@app.post("/api/reset")
+def reset_day(_: None = Depends(require_admin)) -> dict[str, int]:
+    with transaction() as tx:
+        votes_cur = tx.execute("DELETE FROM votes")
+        songs_cur = tx.execute("DELETE FROM songs")
+    return {
+        "deleted_songs": songs_cur.rowcount,
+        "deleted_votes": votes_cur.rowcount,
+    }
