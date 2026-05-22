@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Office Jukebox</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <style>
+        body { padding: 16px; max-width: 600px; margin: 0 auto; }
+        .name-prompt { background: var(--card); padding: 24px; border-radius: 12px; }
+        .name-prompt input { width: 100%; padding: 12px; font-size: 1.25rem; border-radius: 8px; border: 1px solid #555; background: #222; color: var(--fg); }
+        .name-prompt button { padding: 12px 24px; margin-top: 12px; border-radius: 8px; border: none; background: var(--accent); color: white; font-size: 1rem; }
+        .add-row { display: flex; gap: 8px; margin: 16px 0; }
+        .add-row input { flex: 1; padding: 12px; border-radius: 8px; border: 1px solid #555; background: #222; color: var(--fg); }
+        .add-row button { padding: 12px 16px; border-radius: 8px; border: none; background: var(--accent); color: white; }
+        .decade-row { display: flex; gap: 8px; overflow-x: auto; margin-bottom: 12px; }
+        .decade-row .chip { padding: 8px 16px; border-radius: 999px; background: var(--card); cursor: pointer; white-space: nowrap; }
+        .decade-row .chip.active { background: var(--accent); color: white; }
+        .quick-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; margin-bottom: 16px; }
+        .quick-list .card { background: var(--card); padding: 8px; border-radius: 8px; cursor: pointer; text-align: center; font-size: 0.85rem; }
+        .quick-list .card img { width: 100%; border-radius: 4px; }
+        .song-card { display: flex; gap: 12px; align-items: center; background: var(--card); padding: 12px; border-radius: 8px; margin-bottom: 8px; }
+        .song-card.top4 { border-left: 4px solid var(--podium); }
+        .song-card img { width: 80px; border-radius: 4px; }
+        .song-card .meta { flex: 1; min-width: 0; }
+        .song-card .title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
+        .song-card .added-by { color: var(--muted); font-size: 0.85rem; }
+        .vote-btn { padding: 12px; border-radius: 999px; border: none; background: transparent; color: var(--muted); font-size: 1.5rem; cursor: pointer; }
+        .vote-btn.voted { color: #ff4d6d; }
+        .message { padding: 12px; border-radius: 8px; margin: 8px 0; }
+        .message.error { background: #c9302c33; color: #ff8e8e; }
+        .message.info { background: #58a6ff33; color: var(--accent); }
+    </style>
+</head>
+<body>
+    <div id="name-prompt" class="name-prompt" hidden>
+        <h2>What's your name?</h2>
+        <input id="name-input" placeholder="Maya">
+        <button id="name-submit">Join</button>
+    </div>
+
+    <div id="app" hidden>
+        <h2>&#127925; Today's Playlist</h2>
+        <div class="muted">You are <span id="who-am-i"></span> &middot; <a href="#" id="rename">change</a></div>
+
+        <div class="add-row">
+            <input id="url-input" placeholder="Paste a YouTube link&hellip;">
+            <button id="url-submit">Add</button>
+        </div>
+
+        <div id="message-area"></div>
+
+        <div class="decade-row" id="decade-row"></div>
+        <div class="quick-list" id="quick-list"></div>
+
+        <div id="song-list"></div>
+    </div>
+
+    <script src="/static/phone.js"></script>
+</body>
+</html>
