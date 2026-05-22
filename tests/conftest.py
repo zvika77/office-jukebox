@@ -1,9 +1,23 @@
+import sqlite3
+
 import pytest
 from fastapi.testclient import TestClient
 
+from app.db import init_schema, set_connection_for_tests
 from app.main import app
 
 
 @pytest.fixture
-def client() -> TestClient:
+def db() -> sqlite3.Connection:
+    conn = sqlite3.connect(":memory:", check_same_thread=False)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON")
+    init_schema(conn)
+    set_connection_for_tests(conn)
+    yield conn
+    conn.close()
+
+
+@pytest.fixture
+def client(db) -> TestClient:
     return TestClient(app)
