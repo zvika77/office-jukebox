@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Office Jukebox</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <script src="https://www.youtube.com/iframe_api"></script>
+</head>
+<body>
+    <div class="jukebox">
+        <div class="jukebox-header">
+            <img class="qr" src="/api/qrcode.png" alt="Scan to join" width="180" height="180">
+            <div>
+                <h1>&#127925; Office Jukebox</h1>
+                <div class="url" id="public-url">Loading&hellip;</div>
+                <div class="muted">Scan the QR or open the URL on your phone to add a song.</div>
+            </div>
+        </div>
+
+        <div class="podium" id="podium"></div>
+        <div class="song-list" id="rest"></div>
+
+        <div class="admin-actions" id="admin-actions" hidden>
+            <button class="btn-play" id="btn-play">&#9654; Play top 4</button>
+            <button class="btn-reset" id="btn-reset">&#8634; Reset for tomorrow</button>
+        </div>
+
+        <div id="player">
+            <div id="yt-target"></div>
+            <div class="now-playing" id="now-playing"></div>
+            <div class="admin-actions" id="player-actions" hidden>
+                <button class="btn-play" id="btn-skip">&#9197; Skip</button>
+                <button class="btn-reset" id="btn-stop">&#9632; Stop</button>
+            </div>
+        </div>
+    </div>
+    <script src="/static/jukebox.js"></script>
+</body>
+</html>

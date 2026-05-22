@@ -1,8 +1,12 @@
+import io
+import os
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import Depends, FastAPI, HTTPException
-from fastapi.responses import JSONResponse
+import qrcode
+from fastapi import Depends, FastAPI, HTTPException, Response
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from sse_starlette.sse import EventSourceResponse
@@ -222,3 +226,25 @@ async def events():
                 yield {"event": message, "data": message}
 
     return EventSourceResponse(stream())
+
+
+@app.get("/api/qrcode.png")
+def qrcode_png() -> Response:
+    public_url = os.environ.get("PUBLIC_URL", "http://localhost:8000")
+    img = qrcode.make(public_url)
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    return Response(content=buf.getvalue(), media_type="image/png")
+
+
+@app.get("/jukebox")
+def jukebox_page() -> FileResponse:
+    return FileResponse("app/static/jukebox.html")
+
+
+@app.get("/")
+def root_page() -> FileResponse:
+    return FileResponse("app/static/index.html")
+
+
+app.mount("/static", StaticFiles(directory="app/static"), name="static")
