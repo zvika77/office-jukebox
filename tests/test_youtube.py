@@ -1,6 +1,6 @@
 import pytest
 
-from app.youtube import extract_video_id
+from app.youtube import VideoMetadata, extract_video_id, fetch_video_metadata
 
 
 @pytest.mark.parametrize(
@@ -40,3 +40,32 @@ def test_extract_video_id_valid(url, expected):
 )
 def test_extract_video_id_invalid(url):
     assert extract_video_id(url) is None
+
+
+def test_fetch_video_metadata_success(httpx_mock):
+    httpx_mock.add_response(
+        json={
+            "title": "Rick Astley - Never Gonna Give You Up",
+            "thumbnail_url": "https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg",
+        }
+    )
+    meta = fetch_video_metadata("dQw4w9WgXcQ")
+    assert meta == VideoMetadata(
+        title="Rick Astley - Never Gonna Give You Up",
+        thumbnail_url="https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg",
+    )
+
+
+def test_fetch_video_metadata_network_error_falls_back(httpx_mock):
+    import httpx
+
+    httpx_mock.add_exception(httpx.ConnectError("boom"))
+    meta = fetch_video_metadata("dQw4w9WgXcQ")
+    assert meta.title == "Unknown title"
+    assert meta.thumbnail_url.endswith("/hqdefault.jpg")
+
+
+def test_fetch_video_metadata_404_falls_back(httpx_mock):
+    httpx_mock.add_response(status_code=404)
+    meta = fetch_video_metadata("dQw4w9WgXcQ")
+    assert meta.title == "Unknown title"
