@@ -4,7 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.db import init_schema, set_connection_for_tests
-from app.main import app
+from app.main import app, seed_quick_adds
 
 
 @pytest.fixture
@@ -14,6 +14,7 @@ def db() -> sqlite3.Connection:
     conn.execute("PRAGMA foreign_keys = ON")
     init_schema(conn)
     set_connection_for_tests(conn)
+    seed_quick_adds()
     yield conn
     conn.close()
 
