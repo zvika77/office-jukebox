@@ -5,8 +5,11 @@ from fastapi import Depends, FastAPI, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
+from sse_starlette.sse import EventSourceResponse
+
 from app.admin import require_admin
 from app.db import get_connection, transaction
+from app.events import broker, publish_sync
 from app.identity import Identity, require_identity
 from app.seed_data import QUICK_ADDS, thumbnail_for
 from app.youtube import extract_video_id, fetch_video_metadata
@@ -81,6 +84,7 @@ def add_song(
                 "INSERT OR IGNORE INTO votes (song_id, voter_id, created_at) VALUES (?, ?, ?)",
                 (song_id, identity.voter_id, _now()),
             )
+        publish_sync("songs_changed")
         return JSONResponse(
             status_code=200,
             content={"id": song_id, "already_in_list": True},
@@ -95,6 +99,7 @@ def add_song(
             (song_id, video_id, meta.title, meta.thumbnail_url, None, identity.display_name, _now()),
         )
 
+    publish_sync("songs_changed")
     return {
         "id": song_id,
         "youtube_id": video_id,
@@ -163,6 +168,7 @@ def toggle_vote(
     votes = conn.execute(
         "SELECT COUNT(*) AS c FROM votes WHERE song_id = ?", (song_id,)
     ).fetchone()["c"]
+    publish_sync("songs_changed")
     return {"id": song_id, "did_i_vote": did_i_vote, "votes": votes}
 
 
@@ -199,7 +205,20 @@ def reset_day(_: None = Depends(require_admin)) -> dict[str, int]:
     with transaction() as tx:
         votes_cur = tx.execute("DELETE FROM votes")
         songs_cur = tx.execute("DELETE FROM songs")
+    publish_sync("songs_changed")
     return {
         "deleted_songs": songs_cur.rowcount,
         "deleted_votes": votes_cur.rowcount,
     }
+
+
+@app.get("/api/events")
+async def events():
+    async def stream():
+        async with broker.subscribe() as queue:
+            yield {"event": "hello", "data": "connected"}
+            while True:
+                message = await queue.get()
+                yield {"event": message, "data": message}
+
+    return EventSourceResponse(stream())
