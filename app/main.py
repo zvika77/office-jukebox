@@ -1,5 +1,6 @@
 import io
 import os
+import socket
 import uuid
 from datetime import datetime, timezone
 
@@ -16,16 +17,45 @@ from app.db import get_connection, transaction
 from app.events import broker, publish_sync
 from app.identity import Identity, require_identity
 from app.seed_data import QUICK_ADDS, thumbnail_for
-from app.youtube import extract_video_id, fetch_video_metadata
+from app.youtube import (
+    YouTubeAPIError,
+    extract_playlist_id,
+    extract_video_id,
+    fetch_playlist_songs,
+    fetch_video_metadata,
+    search_songs_for_decade,
+)
 
 app = FastAPI(title="Office Jukebox")
 
 
+def _detect_lan_ip() -> str:
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.connect(("8.8.8.8", 80))
+            return s.getsockname()[0]
+    except Exception:
+        return "127.0.0.1"
+
+
+def _public_url() -> str:
+    url = os.environ.get("PUBLIC_URL", "").strip()
+    if url and url != "http://localhost:8000":
+        return url
+    port = os.environ.get("PORT", "8000")
+    return f"http://{_detect_lan_ip()}:{port}"
+
+
 def seed_quick_adds() -> None:
-    with transaction() as conn:
+    """Seed from hardcoded list only when the table is empty."""
+    conn = get_connection()
+    count = conn.execute("SELECT COUNT(*) FROM quick_adds").fetchone()[0]
+    if count > 0:
+        return
+    with transaction() as c:
         for entry in QUICK_ADDS:
-            conn.execute(
-                "INSERT OR IGNORE INTO quick_adds (youtube_id, title, thumbnail_url, decade) "
+            c.execute(
+                "INSERT INTO quick_adds (youtube_id, title, thumbnail_url, decade) "
                 "VALUES (?, ?, ?, ?)",
                 (
                     entry["youtube_id"],
@@ -40,6 +70,14 @@ def seed_quick_adds() -> None:
 def on_startup() -> None:
     get_connection()
     seed_quick_adds()
+    api_key = os.environ.get("YOUTUBE_API_KEY", "").strip()
+    if api_key:
+        try:
+            _do_refresh(api_key)
+        except Exception as exc:
+            # Log but don't crash — the container should still come up
+            import sys
+            print(f"[startup] quick-add refresh failed (will retry on next /refresh): {exc}", file=sys.stderr)
 
 
 def _now() -> str:
@@ -62,6 +100,81 @@ def list_quick_adds() -> list[dict]:
         "SELECT youtube_id, title, thumbnail_url, decade FROM quick_adds ORDER BY decade, title"
     ).fetchall()
     return [dict(row) for row in rows]
+
+
+_DECADES = ["60s", "70s", "80s", "90s", "2000s", "2010s"]
+
+
+def _do_refresh(api_key: str) -> list[dict]:
+    playlist_raw = os.environ.get("YOUTUBE_PLAYLIST_ID", "").strip()
+
+    if playlist_raw:
+        # ── Playlist mode ──────────────────────────────────────────────────────
+        pid = extract_playlist_id(playlist_raw)
+        if not pid:
+            raise HTTPException(
+                status_code=400,
+                detail="YOUTUBE_PLAYLIST_ID is not a valid playlist ID or URL",
+            )
+        try:
+            songs = fetch_playlist_songs(pid, api_key)
+        except YouTubeAPIError as exc:
+            raise HTTPException(status_code=502, detail=f"YouTube API error: {exc}")
+        if not songs:
+            raise HTTPException(
+                status_code=502,
+                detail="Playlist returned no videos — make sure it's public and the ID is correct",
+            )
+        with transaction() as conn:
+            conn.execute("DELETE FROM quick_adds")
+            for s in songs:
+                conn.execute(
+                    "INSERT INTO quick_adds (youtube_id, title, thumbnail_url, decade) VALUES (?, ?, ?, ?)",
+                    (s["youtube_id"], s["title"], s["thumbnail_url"], None),
+                )
+    else:
+        # ── Fallback: decade-based search ──────────────────────────────────────
+        all_songs: list[dict] = []
+        for decade in _DECADES:
+            try:
+                decade_songs = search_songs_for_decade(decade, api_key)
+            except YouTubeAPIError as exc:
+                raise HTTPException(status_code=502, detail=f"YouTube API error: {exc}")
+            all_songs.extend(decade_songs)
+
+        if not all_songs:
+            raise HTTPException(
+                status_code=502,
+                detail="YouTube search returned no results — check your API key",
+            )
+
+        seen: set[str] = set()
+        unique_songs = []
+        for s in all_songs:
+            if s["youtube_id"] not in seen:
+                seen.add(s["youtube_id"])
+                unique_songs.append(s)
+
+        with transaction() as conn:
+            conn.execute("DELETE FROM quick_adds")
+            for s in unique_songs:
+                conn.execute(
+                    "INSERT INTO quick_adds (youtube_id, title, thumbnail_url, decade) VALUES (?, ?, ?, ?)",
+                    (s["youtube_id"], s["title"], s["thumbnail_url"], s.get("decade")),
+                )
+
+    rows = get_connection().execute(
+        "SELECT youtube_id, title, thumbnail_url, decade FROM quick_adds ORDER BY rowid"
+    ).fetchall()
+    return [dict(row) for row in rows]
+
+
+@app.post("/api/quick-adds/refresh")
+def refresh_quick_adds() -> list[dict]:
+    api_key = os.environ.get("YOUTUBE_API_KEY", "").strip()
+    if not api_key:
+        raise HTTPException(status_code=503, detail="YOUTUBE_API_KEY not set in server config")
+    return _do_refresh(api_key)
 
 
 @app.post("/api/songs", status_code=201)
@@ -230,7 +343,7 @@ async def events():
 
 @app.get("/api/qrcode.png")
 def qrcode_png() -> Response:
-    public_url = os.environ.get("PUBLIC_URL", "http://localhost:8000")
+    public_url = _public_url()
     img = qrcode.make(public_url)
     buf = io.BytesIO()
     img.save(buf, format="PNG")

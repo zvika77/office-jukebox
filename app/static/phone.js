@@ -2,7 +2,11 @@ const VOTER_KEY = "jukebox.voter_id";
 const NAME_KEY = "jukebox.display_name";
 
 function uuid() {
-    return crypto.randomUUID();
+    if (typeof crypto.randomUUID === "function") return crypto.randomUUID();
+    return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+        const r = (Math.random() * 16) | 0;
+        return (c === "x" ? r : (r & 0x3) | 0x8).toString(16);
+    });
 }
 
 function getVoterId() {
@@ -111,48 +115,57 @@ async function addByUrl(url) {
     await loadSongs();
 }
 
+async function refreshQuickAdds() {
+    const btn = document.getElementById("btn-refresh-suggestions");
+    btn.textContent = "↻ Refreshing…";
+    btn.disabled = true;
+    try {
+        const response = await fetch("/api/quick-adds/refresh", { method: "POST" });
+        if (response.ok) {
+            const rows = await response.json();
+            renderQuickAdds(rows);
+            showMessage("Suggestions refreshed!", "info");
+            return;
+        }
+        let detail = "Couldn't refresh suggestions";
+        try {
+            const body = await response.json();
+            if (body.detail) detail = body.detail;
+        } catch { /* ignore parse errors */ }
+        showMessage(detail, "error");
+    } catch {
+        showMessage("Couldn't reach the server", "error");
+    } finally {
+        btn.textContent = "↻ Refresh";
+        btn.disabled = false;
+    }
+}
+
+function renderQuickAdds(rows) {
+    const quickList = document.getElementById("quick-list");
+    quickList.innerHTML = "";
+    rows.forEach((row) => {
+        const card = document.createElement("div");
+        card.className = "card";
+        const img = document.createElement("img");
+        img.src = row.thumbnail_url;
+        img.loading = "lazy";
+        card.appendChild(img);
+        const title = document.createElement("div");
+        title.textContent = row.title;
+        card.appendChild(title);
+        card.addEventListener("click", () =>
+            addByUrl(`https://www.youtube.com/watch?v=${row.youtube_id}`)
+        );
+        quickList.appendChild(card);
+    });
+}
+
 async function loadQuickAdds() {
     const response = await fetch("/api/quick-adds");
     if (!response.ok) return;
     const rows = await response.json();
-    const decades = ["60s", "70s", "80s", "90s", "2000s", "2010s"];
-    const byDecade = {};
-    decades.forEach((d) => (byDecade[d] = []));
-    rows.forEach((row) => byDecade[row.decade]?.push(row));
-
-    const decadeRow = document.getElementById("decade-row");
-    const quickList = document.getElementById("quick-list");
-    let activeDecade = decades[0];
-
-    function renderDecade() {
-        decadeRow.innerHTML = "";
-        decades.forEach((d) => {
-            const chip = document.createElement("div");
-            chip.className = "chip" + (d === activeDecade ? " active" : "");
-            chip.textContent = d;
-            chip.addEventListener("click", () => {
-                activeDecade = d;
-                renderDecade();
-            });
-            decadeRow.appendChild(chip);
-        });
-        quickList.innerHTML = "";
-        byDecade[activeDecade].forEach((row) => {
-            const card = document.createElement("div");
-            card.className = "card";
-            const img = document.createElement("img");
-            img.src = row.thumbnail_url;
-            card.appendChild(img);
-            const title = document.createElement("div");
-            title.textContent = row.title;
-            card.appendChild(title);
-            card.addEventListener("click", () =>
-                addByUrl(`https://www.youtube.com/watch?v=${row.youtube_id}`)
-            );
-            quickList.appendChild(card);
-        });
-    }
-    renderDecade();
+    renderQuickAdds(rows);
 }
 
 function setupAddRow() {
@@ -195,6 +208,7 @@ function startApp() {
     loadQuickAdds();
     loadSongs();
     setInterval(loadSongs, 10000);
+    document.getElementById("btn-refresh-suggestions").addEventListener("click", refreshQuickAdds);
 }
 
 function setupNamePrompt() {

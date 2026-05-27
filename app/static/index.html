@@ -13,9 +13,6 @@
         .add-row { display: flex; gap: 8px; margin: 16px 0; }
         .add-row input { flex: 1; padding: 12px; border-radius: 8px; border: 1px solid #555; background: #222; color: var(--fg); }
         .add-row button { padding: 12px 16px; border-radius: 8px; border: none; background: var(--accent); color: white; }
-        .decade-row { display: flex; gap: 8px; overflow-x: auto; margin-bottom: 12px; }
-        .decade-row .chip { padding: 8px 16px; border-radius: 999px; background: var(--card); cursor: pointer; white-space: nowrap; }
-        .decade-row .chip.active { background: var(--accent); color: white; }
         .quick-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; margin-bottom: 16px; }
         .quick-list .card { background: var(--card); padding: 8px; border-radius: 8px; cursor: pointer; text-align: center; font-size: 0.85rem; }
         .quick-list .card img { width: 100%; border-radius: 4px; }
@@ -50,7 +47,10 @@
 
         <div id="message-area"></div>
 
-        <div class="decade-row" id="decade-row"></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+            <span style="font-weight:600;font-size:0.9rem;">Quick add</span>
+            <button id="btn-refresh-suggestions" style="padding:4px 10px;border-radius:6px;border:none;background:var(--card);color:var(--muted);font-size:0.8rem;cursor:pointer;">↻ Refresh</button>
+        </div>
         <div class="quick-list" id="quick-list"></div>
 
         <div id="song-list"></div>

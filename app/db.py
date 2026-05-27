@@ -25,16 +25,36 @@ CREATE TABLE IF NOT EXISTS quick_adds (
     youtube_id TEXT PRIMARY KEY,
     title TEXT NOT NULL,
     thumbnail_url TEXT NOT NULL,
-    decade TEXT NOT NULL
+    decade TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_votes_song_id ON votes(song_id);
 """
 
 
+def _migrate(conn: sqlite3.Connection) -> None:
+    """Apply pending migrations against an already-opened connection."""
+    # Migration: make quick_adds.decade nullable (old schema had NOT NULL).
+    cols = {row[1]: row for row in conn.execute("PRAGMA table_info(quick_adds)").fetchall()}
+    if "decade" in cols and cols["decade"][3]:  # notnull flag == 1
+        conn.executescript("""
+            CREATE TABLE quick_adds_new (
+                youtube_id TEXT PRIMARY KEY,
+                title TEXT NOT NULL,
+                thumbnail_url TEXT NOT NULL,
+                decade TEXT
+            );
+            INSERT INTO quick_adds_new SELECT youtube_id, title, thumbnail_url, decade FROM quick_adds;
+            DROP TABLE quick_adds;
+            ALTER TABLE quick_adds_new RENAME TO quick_adds;
+        """)
+        conn.commit()
+
+
 def init_schema(conn: sqlite3.Connection) -> None:
     conn.executescript(SCHEMA)
     conn.commit()
+    _migrate(conn)
 
 
 def _connect(path: str) -> sqlite3.Connection:
