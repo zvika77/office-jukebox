@@ -11,7 +11,7 @@ def _add(client, httpx_mock, vid: str):
     ).json()["id"]
 
 
-def test_play_returns_top4_in_vote_order(client, httpx_mock, monkeypatch):
+def test_play_returns_top3_in_vote_order(client, httpx_mock, monkeypatch):
     monkeypatch.setenv("ADMIN_TOKEN", "s3cret")
     vids = [f"vid{i:08d}aa"[:11] for i in range(5)]
     ids = [_add(client, httpx_mock, v) for v in vids]
@@ -26,7 +26,7 @@ def test_play_returns_top4_in_vote_order(client, httpx_mock, monkeypatch):
     response = client.post("/api/play", headers={"X-Admin-Token": "s3cret"})
     assert response.status_code == 200
     body = response.json()
-    assert [s["id"] for s in body["queue"]] == ids[:4]
+    assert [s["id"] for s in body["queue"]] == ids[:3]
     assert body["queue"][0]["youtube_id"]
 
 

@@ -10,6 +10,9 @@ let ytPlayer = null;
 let queue = [];
 let queueIndex = 0;
 
+let _deadline = null;       // Date, or null when voting is open forever
+let _serverOffsetMs = 0;    // server clock minus this device's clock
+
 async function fetchSongs() {
     const response = await fetch("/api/songs", { headers: identityHeaders });
     return response.json();
@@ -25,7 +28,7 @@ function thumb(url) {
 function renderPodium(songs) {
     const container = document.getElementById("podium");
     container.innerHTML = "";
-    songs.slice(0, 4).forEach((song, i) => {
+    songs.slice(0, 3).forEach((song, i) => {
         const card = document.createElement("div");
         card.className = "card";
         card.appendChild(thumb(song.thumbnail_url));
@@ -47,7 +50,7 @@ function renderPodium(songs) {
 function renderRest(songs) {
     const container = document.getElementById("rest");
     container.innerHTML = "";
-    songs.slice(4).forEach((song) => {
+    songs.slice(3).forEach((song) => {
         const row = document.createElement("div");
         row.className = "row";
         row.appendChild(thumb(song.thumbnail_url));
@@ -73,6 +76,61 @@ async function refresh() {
     const songs = await fetchSongs();
     renderPodium(songs);
     renderRest(songs);
+}
+
+function serverNow() {
+    return new Date(Date.now() + _serverOffsetMs);
+}
+
+function formatRemaining(ms) {
+    const total = Math.max(0, Math.floor(ms / 1000));
+    const h = Math.floor(total / 3600);
+    const m = Math.floor((total % 3600) / 60);
+    const s = total % 60;
+    const pad = (n) => String(n).padStart(2, "0");
+    return `${pad(h)}:${pad(m)}:${pad(s)}`;
+}
+
+// Format a Date as a value the <input type="datetime-local"> understands (local time).
+function toLocalInput(date) {
+    const pad = (n) => String(n).padStart(2, "0");
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}` +
+        `T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function updateCountdown() {
+    const banner = document.getElementById("countdown-banner");
+    if (_deadline === null) {
+        banner.hidden = true;
+        return;
+    }
+    const remaining = _deadline.getTime() - serverNow().getTime();
+    banner.hidden = false;
+    if (remaining <= 0) {
+        banner.className = "countdown-banner closed";
+        banner.textContent = "🔒 Voting has closed";
+    } else {
+        banner.className = "countdown-banner open";
+        banner.innerHTML = `⏳ Voting closes in <span class="time">${formatRemaining(remaining)}</span>`;
+    }
+}
+
+async function loadDeadline() {
+    try {
+        const response = await fetch("/api/voting-deadline");
+        if (!response.ok) return;
+        const body = await response.json();
+        _deadline = body.deadline ? new Date(body.deadline) : null;
+        if (body.server_now) {
+            _serverOffsetMs = new Date(body.server_now).getTime() - Date.now();
+        }
+        // Keep the admin's input box in sync with the stored deadline.
+        const input = document.getElementById("deadline-input");
+        if (input && _deadline) input.value = toLocalInput(_deadline);
+        updateCountdown();
+    } catch {
+        /* ignore network hiccups; the ticker keeps the last known state */
+    }
 }
 
 function showPlayer(on) {
@@ -145,6 +203,31 @@ async function startPlayback() {
     playCurrent();
 }
 
+async function setDeadline() {
+    if (!adminToken) return;
+    const input = document.getElementById("deadline-input");
+    const value = input.value;
+    if (!value) {
+        showToast("Pick a date and time first");
+        return;
+    }
+    // datetime-local is local time; toISOString() converts it to UTC for the server.
+    const iso = new Date(value).toISOString();
+    const response = await fetch(
+        `/api/voting-deadline?admin=${encodeURIComponent(adminToken)}`,
+        {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ deadline: iso }),
+        },
+    );
+    if (!response.ok) {
+        showToast("Couldn't set the deadline");
+        return;
+    }
+    await loadDeadline();
+}
+
 function setupAdmin() {
     if (!adminToken) return;
     document.getElementById("admin-actions").hidden = false;
@@ -153,6 +236,7 @@ function setupAdmin() {
         if (!confirm("Wipe all songs and votes for today?")) return;
         await fetch(`/api/reset?admin=${encodeURIComponent(adminToken)}`, { method: "POST" });
     });
+    document.getElementById("btn-set-deadline").addEventListener("click", setDeadline);
     document.getElementById("btn-skip").addEventListener("click", advance);
     document.getElementById("btn-stop").addEventListener("click", stopPlayback);
 }
@@ -160,9 +244,12 @@ function setupAdmin() {
 function setupSSE() {
     const source = new EventSource("/api/events");
     source.addEventListener("songs_changed", refresh);
+    source.addEventListener("deadline_changed", loadDeadline);
 }
 
 document.getElementById("public-url").textContent = location.origin;
 setupAdmin();
 setupSSE();
 refresh();
+loadDeadline();
+setInterval(updateCountdown, 1000);

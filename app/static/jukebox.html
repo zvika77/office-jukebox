@@ -17,11 +17,15 @@
             </div>
         </div>
 
+        <div id="countdown-banner" class="countdown-banner" hidden></div>
+
         <div class="podium" id="podium"></div>
         <div class="song-list" id="rest"></div>
 
         <div class="admin-actions" id="admin-actions" hidden>
-            <button class="btn-play" id="btn-play">&#9654; Play top 4</button>
+            <input type="datetime-local" id="deadline-input" class="deadline-input">
+            <button class="btn-play" id="btn-set-deadline">&#9200; Set deadline</button>
+            <button class="btn-play" id="btn-play">&#9654; Play top 3</button>
             <button class="btn-reset" id="btn-reset">&#8634; Reset for tomorrow</button>
         </div>
 

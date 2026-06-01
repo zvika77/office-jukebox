@@ -17,7 +17,7 @@ body { margin: 0; font-family: system-ui, -apple-system, sans-serif; background:
 .jukebox-header .qr { background: white; padding: 12px; border-radius: 12px; }
 .jukebox-header .url { font-family: monospace; font-size: 1.25rem; color: var(--accent); }
 
-.podium { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 32px; min-height: 120px; }
+.podium { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 32px; min-height: 120px; }
 .podium .card { background: var(--card); padding: 12px; border-radius: 12px; border: 2px solid var(--podium); }
 .podium .card img { width: 100%; border-radius: 8px; }
 .podium .card .votes { font-size: 1.5rem; font-weight: bold; color: var(--podium); }
@@ -28,8 +28,14 @@ body { margin: 0; font-family: system-ui, -apple-system, sans-serif; background:
 .song-list .row .meta { flex: 1; }
 .song-list .row .votes { font-size: 1.25rem; font-weight: bold; }
 
-.admin-actions { position: fixed; bottom: 24px; right: 24px; display: flex; gap: 12px; z-index: 50; }
+.countdown-banner { padding: 16px 24px; border-radius: 12px; margin-bottom: 24px; text-align: center; font-weight: 600; font-size: 1.5rem; }
+.countdown-banner.open { background: #58a6ff22; color: var(--accent); }
+.countdown-banner.closed { background: #c9302c22; color: #ff8e8e; }
+.countdown-banner .time { font-family: monospace; font-size: 2rem; letter-spacing: 2px; }
+
+.admin-actions { position: fixed; bottom: 24px; right: 24px; display: flex; gap: 12px; z-index: 50; align-items: center; }
 .admin-actions button { padding: 12px 24px; font-size: 1rem; border-radius: 8px; border: none; cursor: pointer; }
+.admin-actions .deadline-input { padding: 10px 12px; font-size: 0.95rem; border-radius: 8px; border: 1px solid #555; background: #222; color: var(--fg); }
 .btn-play { background: var(--accent); color: white; }
 .btn-reset { background: #c9302c; color: white; }
 

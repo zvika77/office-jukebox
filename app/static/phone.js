@@ -1,6 +1,11 @@
 const VOTER_KEY = "jukebox.voter_id";
 const NAME_KEY = "jukebox.display_name";
 
+let _deadline = null;        // Date, or null when voting is open forever
+let _serverOffsetMs = 0;     // server clock minus this device's clock
+let _votingOpen = true;      // false once the deadline passes
+let _latestSongs = [];       // last songs payload, for re-render on tick/state flip
+
 function uuid() {
     if (typeof crypto.randomUUID === "function") return crypto.randomUUID();
     return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
@@ -50,6 +55,64 @@ async function loadSongs() {
     renderSongs(songs);
 }
 
+function serverNow() {
+    return new Date(Date.now() + _serverOffsetMs);
+}
+
+function formatRemaining(ms) {
+    const total = Math.max(0, Math.floor(ms / 1000));
+    const h = Math.floor(total / 3600);
+    const m = Math.floor((total % 3600) / 60);
+    const s = total % 60;
+    const pad = (n) => String(n).padStart(2, "0");
+    return `${pad(h)}:${pad(m)}:${pad(s)}`;
+}
+
+// Toggle the add/quick-add UI and re-render the song list when the
+// open/closed state flips. Safe to call every tick — only re-renders on change.
+function setVotingOpen(open) {
+    const changed = open !== _votingOpen;
+    _votingOpen = open;
+    const section = document.getElementById("voting-section");
+    if (section) section.hidden = !open;
+    if (changed) renderSongs(_latestSongs);
+}
+
+function updateCountdown() {
+    const banner = document.getElementById("countdown-banner");
+    if (_deadline === null) {
+        banner.hidden = true;
+        setVotingOpen(true);
+        return;
+    }
+    const remaining = _deadline.getTime() - serverNow().getTime();
+    banner.hidden = false;
+    if (remaining <= 0) {
+        banner.className = "countdown-banner closed";
+        banner.textContent = "🔒 Voting has closed — here's the lineup";
+        setVotingOpen(false);
+    } else {
+        banner.className = "countdown-banner open";
+        banner.innerHTML = `⏳ Voting closes in <span class="time">${formatRemaining(remaining)}</span>`;
+        setVotingOpen(true);
+    }
+}
+
+async function loadDeadline() {
+    try {
+        const response = await fetch("/api/voting-deadline");
+        if (!response.ok) return;
+        const body = await response.json();
+        _deadline = body.deadline ? new Date(body.deadline) : null;
+        if (body.server_now) {
+            _serverOffsetMs = new Date(body.server_now).getTime() - Date.now();
+        }
+        updateCountdown();
+    } catch {
+        /* ignore network hiccups; the ticker keeps the last known state */
+    }
+}
+
 function escapeHtml(s) {
     return s.replace(/[&<>"']/g, (c) => ({
         "&": "&amp;",
@@ -61,11 +124,14 @@ function escapeHtml(s) {
 }
 
 function renderSongs(songs) {
+    _latestSongs = songs;
     const container = document.getElementById("song-list");
     container.innerHTML = "";
-    songs.forEach((song, i) => {
+    // Once voting closes, collapse to just the top 3 that will play.
+    const list = _votingOpen ? songs : songs.slice(0, 3);
+    list.forEach((song, i) => {
         const card = document.createElement("div");
-        card.className = "song-card" + (i < 4 ? " top4" : "");
+        card.className = "song-card" + (i < 3 ? " top3" : "");
         const img = document.createElement("img");
         img.src = song.thumbnail_url;
         img.loading = "lazy";
@@ -75,14 +141,16 @@ function renderSongs(songs) {
         meta.innerHTML = `
             <div class="title">${escapeHtml(song.title)}</div>
             <div class="added-by">added by ${escapeHtml(song.added_by_name)} &middot; ${song.votes} ❤</div>
-            ${i < 4 ? '<div class="muted">🏆 in the top 4</div>' : ""}
+            ${i < 3 ? '<div class="muted">🏆 in the top 3</div>' : ""}
         `;
         card.appendChild(meta);
-        const btn = document.createElement("button");
-        btn.className = "vote-btn" + (song.did_i_vote ? " voted" : "");
-        btn.textContent = song.did_i_vote ? "❤" : "🤍";
-        btn.addEventListener("click", () => toggleVote(song.id));
-        card.appendChild(btn);
+        if (_votingOpen) {
+            const btn = document.createElement("button");
+            btn.className = "vote-btn" + (song.did_i_vote ? " voted" : "");
+            btn.textContent = song.did_i_vote ? "❤" : "🤍";
+            btn.addEventListener("click", () => toggleVote(song.id));
+            card.appendChild(btn);
+        }
         container.appendChild(card);
     });
 }
@@ -92,6 +160,11 @@ async function toggleVote(songId) {
         method: "POST",
         headers: identityHeaders(),
     });
+    if (response.status === 403) {
+        showMessage("Voting has closed", "error");
+        await loadDeadline();
+        return;
+    }
     if (!response.ok) return;
     await loadSongs();
 }
@@ -102,6 +175,11 @@ async function addByUrl(url) {
         headers: identityHeaders(),
         body: JSON.stringify({ youtube_url: url }),
     });
+    if (response.status === 403) {
+        showMessage("Voting has closed", "error");
+        await loadDeadline();
+        return;
+    }
     if (response.status === 400) {
         const body = await response.json();
         showMessage(body.detail || "couldn't add that link", "error");
@@ -196,6 +274,7 @@ function setupRename() {
 function setupSSE() {
     const source = new EventSource("/api/events");
     source.addEventListener("songs_changed", loadSongs);
+    source.addEventListener("deadline_changed", loadDeadline);
 }
 
 function startApp() {
@@ -207,7 +286,9 @@ function startApp() {
     setupSSE();
     loadQuickAdds();
     loadSongs();
+    loadDeadline();
     setInterval(loadSongs, 10000);
+    setInterval(updateCountdown, 1000);
     document.getElementById("btn-refresh-suggestions").addEventListener("click", refreshQuickAdds);
 }
 

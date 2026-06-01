@@ -17,7 +17,11 @@
         .quick-list .card { background: var(--card); padding: 8px; border-radius: 8px; cursor: pointer; text-align: center; font-size: 0.85rem; }
         .quick-list .card img { width: 100%; border-radius: 4px; }
         .song-card { display: flex; gap: 12px; align-items: center; background: var(--card); padding: 12px; border-radius: 8px; margin-bottom: 8px; }
-        .song-card.top4 { border-left: 4px solid var(--podium); }
+        .song-card.top3 { border-left: 4px solid var(--podium); }
+        .countdown-banner { padding: 12px 16px; border-radius: 8px; margin: 12px 0; text-align: center; font-weight: 600; }
+        .countdown-banner.open { background: #58a6ff22; color: var(--accent); }
+        .countdown-banner.closed { background: #c9302c22; color: #ff8e8e; }
+        .countdown-banner .time { font-family: monospace; font-size: 1.4rem; letter-spacing: 1px; }
         .song-card img { width: 80px; border-radius: 4px; }
         .song-card .meta { flex: 1; min-width: 0; }
         .song-card .title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
@@ -40,18 +44,22 @@
         <h2>&#127925; Today's Playlist</h2>
         <div class="muted">You are <span id="who-am-i"></span> &middot; <a href="#" id="rename">change</a></div>
 
-        <div class="add-row">
-            <input id="url-input" placeholder="Paste a YouTube link&hellip;">
-            <button id="url-submit">Add</button>
-        </div>
+        <div id="countdown-banner" class="countdown-banner" hidden></div>
 
         <div id="message-area"></div>
 
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
-            <span style="font-weight:600;font-size:0.9rem;">Quick add</span>
-            <button id="btn-refresh-suggestions" style="padding:4px 10px;border-radius:6px;border:none;background:var(--card);color:var(--muted);font-size:0.8rem;cursor:pointer;">↻ Refresh</button>
+        <div id="voting-section">
+            <div class="add-row">
+                <input id="url-input" placeholder="Paste a YouTube link&hellip;">
+                <button id="url-submit">Add</button>
+            </div>
+
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+                <span style="font-weight:600;font-size:0.9rem;">Quick add</span>
+                <button id="btn-refresh-suggestions" style="padding:4px 10px;border-radius:6px;border:none;background:var(--card);color:var(--muted);font-size:0.8rem;cursor:pointer;">↻ Refresh</button>
+            </div>
+            <div class="quick-list" id="quick-list"></div>
         </div>
-        <div class="quick-list" id="quick-list"></div>
 
         <div id="song-list"></div>
     </div>

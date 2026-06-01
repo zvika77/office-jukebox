@@ -17,6 +17,7 @@ from app.db import get_connection, transaction
 from app.events import broker, publish_sync
 from app.identity import Identity, require_identity
 from app.seed_data import QUICK_ADDS, thumbnail_for
+from app.voting import get_deadline, set_deadline, voting_is_open
 from app.youtube import (
     YouTubeAPIError,
     extract_playlist_id,
@@ -86,6 +87,10 @@ def _now() -> str:
 
 class AddSongBody(BaseModel):
     youtube_url: str
+
+
+class DeadlineBody(BaseModel):
+    deadline: str | None = None  # ISO-8601 UTC, or null to clear
 
 
 @app.get("/healthz")
@@ -182,6 +187,9 @@ def add_song(
     body: AddSongBody,
     identity: Identity = Depends(require_identity),
 ):
+    if not voting_is_open():
+        raise HTTPException(status_code=403, detail="Voting has closed")
+
     video_id = extract_video_id(body.youtube_url)
     if not video_id:
         raise HTTPException(
@@ -263,6 +271,9 @@ def toggle_vote(
     song_id: str,
     identity: Identity = Depends(require_identity),
 ) -> dict:
+    if not voting_is_open():
+        raise HTTPException(status_code=403, detail="Voting has closed")
+
     conn = get_connection()
     exists = conn.execute("SELECT 1 FROM songs WHERE id = ?", (song_id,)).fetchone()
     if not exists:
@@ -300,7 +311,7 @@ def play(_: None = Depends(require_admin)) -> dict:
         LEFT JOIN votes v ON v.song_id = s.id
         GROUP BY s.id
         ORDER BY votes DESC, s.added_at ASC
-        LIMIT 4
+        LIMIT 3
         """
     ).fetchall()
     return {
@@ -322,10 +333,47 @@ def reset_day(_: None = Depends(require_admin)) -> dict[str, int]:
     with transaction() as tx:
         votes_cur = tx.execute("DELETE FROM votes")
         songs_cur = tx.execute("DELETE FROM songs")
+        # Clearing the deadline reopens voting for the next day.
+        tx.execute("DELETE FROM settings WHERE key = 'voting_deadline'")
     publish_sync("songs_changed")
+    publish_sync("deadline_changed")
     return {
         "deleted_songs": songs_cur.rowcount,
         "deleted_votes": votes_cur.rowcount,
+    }
+
+
+@app.get("/api/voting-deadline")
+def get_voting_deadline() -> dict:
+    deadline = get_deadline()
+    return {
+        "deadline": deadline.isoformat() if deadline else None,
+        "server_now": _now(),
+    }
+
+
+@app.post("/api/voting-deadline")
+def set_voting_deadline(
+    body: DeadlineBody,
+    _: None = Depends(require_admin),
+) -> dict:
+    if body.deadline is None:
+        set_deadline(None)
+    else:
+        raw = body.deadline.strip().replace("Z", "+00:00")
+        try:
+            dt = datetime.fromisoformat(raw)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="invalid deadline format")
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        set_deadline(dt)
+
+    deadline = get_deadline()
+    publish_sync("deadline_changed")
+    return {
+        "deadline": deadline.isoformat() if deadline else None,
+        "server_now": _now(),
     }
 
 

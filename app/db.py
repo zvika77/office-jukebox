@@ -28,6 +28,11 @@ CREATE TABLE IF NOT EXISTS quick_adds (
     decade TEXT
 );
 
+CREATE TABLE IF NOT EXISTS settings (
+    key TEXT PRIMARY KEY,
+    value TEXT
+);
+
 CREATE INDEX IF NOT EXISTS idx_votes_song_id ON votes(song_id);
 """
 
