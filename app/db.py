@@ -77,6 +77,10 @@ def get_connection() -> sqlite3.Connection:
     global _singleton
     if _singleton is None:
         path = os.environ.get("DB_PATH", "jukebox.db")
+        # Ensure the parent directory exists (needed when DB_PATH is on a mounted volume).
+        parent = os.path.dirname(path)
+        if parent:
+            os.makedirs(parent, exist_ok=True)
         _singleton = _connect(path)
         init_schema(_singleton)
     return _singleton
