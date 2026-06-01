@@ -7,6 +7,9 @@
     --card: #161b22;
 }
 
+/* Ensure [hidden] always wins over display:flex/grid rules on the same element. */
+[hidden] { display: none !important; }
+
 * { box-sizing: border-box; }
 body { margin: 0; font-family: system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--fg); }
 .muted { color: var(--muted); }
