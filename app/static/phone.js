@@ -271,23 +271,17 @@ function setupRename() {
     });
 }
 
-function setupSSE() {
-    const source = new EventSource("/api/events");
-    source.addEventListener("songs_changed", loadSongs);
-    source.addEventListener("deadline_changed", loadDeadline);
-}
-
 function startApp() {
     document.getElementById("name-prompt").hidden = true;
     document.getElementById("app").hidden = false;
     document.getElementById("who-am-i").textContent = getDisplayName();
     setupAddRow();
     setupRename();
-    setupSSE();
     loadQuickAdds();
     loadSongs();
     loadDeadline();
-    setInterval(loadSongs, 10000);
+    setInterval(loadSongs, 4000);
+    setInterval(loadDeadline, 4000);
     setInterval(updateCountdown, 1000);
     document.getElementById("btn-refresh-suggestions").addEventListener("click", refreshQuickAdds);
 }

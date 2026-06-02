@@ -241,15 +241,10 @@ function setupAdmin() {
     document.getElementById("btn-stop").addEventListener("click", stopPlayback);
 }
 
-function setupSSE() {
-    const source = new EventSource("/api/events");
-    source.addEventListener("songs_changed", refresh);
-    source.addEventListener("deadline_changed", loadDeadline);
-}
-
 document.getElementById("public-url").textContent = location.origin;
 setupAdmin();
-setupSSE();
 refresh();
 loadDeadline();
+setInterval(refresh, 4000);
+setInterval(loadDeadline, 4000);
 setInterval(updateCountdown, 1000);
