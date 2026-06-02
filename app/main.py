@@ -10,11 +10,8 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from sse_starlette.sse import EventSourceResponse
-
 from app.admin import require_admin
 from app.db import get_connection, transaction
-from app.events import broker, publish_sync
 from app.identity import Identity, require_identity
 from app.seed_data import QUICK_ADDS, thumbnail_for
 from app.voting import get_deadline, set_deadline, voting_is_open
@@ -210,7 +207,6 @@ def add_song(
                 "ON CONFLICT (song_id, voter_id) DO NOTHING",
                 (song_id, identity.voter_id, _now()),
             )
-        publish_sync("songs_changed")
         return JSONResponse(
             status_code=200,
             content={"id": song_id, "already_in_list": True},
@@ -225,7 +221,6 @@ def add_song(
             (song_id, video_id, meta.title, meta.thumbnail_url, None, identity.display_name, _now()),
         )
 
-    publish_sync("songs_changed")
     return {
         "id": song_id,
         "youtube_id": video_id,
@@ -300,7 +295,6 @@ def toggle_vote(
         votes = conn.execute(
             "SELECT COUNT(*) AS c FROM votes WHERE song_id = %s", (song_id,)
         ).fetchone()["c"]
-    publish_sync("songs_changed")
     return {"id": song_id, "did_i_vote": did_i_vote, "votes": votes}
 
 
@@ -339,8 +333,6 @@ def reset_day(_: None = Depends(require_admin)) -> dict[str, int]:
         songs_cur = tx.execute("DELETE FROM songs")
         # Clearing the deadline reopens voting for the next day.
         tx.execute("DELETE FROM settings WHERE key = 'voting_deadline'")
-    publish_sync("songs_changed")
-    publish_sync("deadline_changed")
     return {
         "deleted_songs": songs_cur.rowcount,
         "deleted_votes": votes_cur.rowcount,
@@ -374,23 +366,10 @@ def set_voting_deadline(
         set_deadline(dt)
 
     deadline = get_deadline()
-    publish_sync("deadline_changed")
     return {
         "deadline": deadline.isoformat() if deadline else None,
         "server_now": _now(),
     }
-
-
-@app.get("/api/events")
-async def events():
-    async def stream():
-        async with broker.subscribe() as queue:
-            yield {"event": "hello", "data": "connected"}
-            while True:
-                message = await queue.get()
-                yield {"event": message, "data": message}
-
-    return EventSourceResponse(stream())
 
 
 @app.get("/api/qrcode.png")
