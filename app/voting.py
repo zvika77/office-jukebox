@@ -14,9 +14,10 @@ _KEY = "voting_deadline"
 
 def get_deadline() -> datetime | None:
     """Return the deadline as a timezone-aware UTC datetime, or None when unset."""
-    row = get_connection().execute(
-        "SELECT value FROM settings WHERE key = ?", (_KEY,)
-    ).fetchone()
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT value FROM settings WHERE key = %s", (_KEY,)
+        ).fetchone()
     if not row or not row["value"]:
         return None
     raw = row["value"].replace("Z", "+00:00")
@@ -31,12 +32,12 @@ def set_deadline(dt: datetime | None) -> None:
     """Store the deadline (UTC), or clear it when given None."""
     with transaction() as conn:
         if dt is None:
-            conn.execute("DELETE FROM settings WHERE key = ?", (_KEY,))
+            conn.execute("DELETE FROM settings WHERE key = %s", (_KEY,))
             return
         iso = dt.astimezone(timezone.utc).isoformat()
         conn.execute(
-            "INSERT INTO settings (key, value) VALUES (?, ?) "
-            "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            "INSERT INTO settings (key, value) VALUES (%s, %s) "
+            "ON CONFLICT (key) DO UPDATE SET value = excluded.value",
             (_KEY, iso),
         )
 

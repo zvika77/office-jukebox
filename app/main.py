@@ -49,15 +49,15 @@ def _public_url() -> str:
 
 def seed_quick_adds() -> None:
     """Seed from hardcoded list only when the table is empty."""
-    conn = get_connection()
-    count = conn.execute("SELECT COUNT(*) FROM quick_adds").fetchone()[0]
+    with get_connection() as conn:
+        count = conn.execute("SELECT COUNT(*) AS n FROM quick_adds").fetchone()["n"]
     if count > 0:
         return
-    with transaction() as c:
+    with transaction() as tx:
         for entry in QUICK_ADDS:
-            c.execute(
+            tx.execute(
                 "INSERT INTO quick_adds (youtube_id, title, thumbnail_url, decade) "
-                "VALUES (?, ?, ?, ?)",
+                "VALUES (%s, %s, %s, %s)",
                 (
                     entry["youtube_id"],
                     entry["title"],
@@ -69,7 +69,6 @@ def seed_quick_adds() -> None:
 
 @app.on_event("startup")
 def on_startup() -> None:
-    get_connection()
     seed_quick_adds()
     api_key = os.environ.get("YOUTUBE_API_KEY", "").strip()
     if api_key:
@@ -100,10 +99,10 @@ def healthz() -> dict[str, str]:
 
 @app.get("/api/quick-adds")
 def list_quick_adds() -> list[dict]:
-    conn = get_connection()
-    rows = conn.execute(
-        "SELECT youtube_id, title, thumbnail_url, decade FROM quick_adds ORDER BY decade, title"
-    ).fetchall()
+    with get_connection() as conn:
+        rows = conn.execute(
+            "SELECT youtube_id, title, thumbnail_url, decade FROM quick_adds ORDER BY decade, title"
+        ).fetchall()
     return [dict(row) for row in rows]
 
 
@@ -134,7 +133,7 @@ def _do_refresh(api_key: str) -> list[dict]:
             conn.execute("DELETE FROM quick_adds")
             for s in songs:
                 conn.execute(
-                    "INSERT INTO quick_adds (youtube_id, title, thumbnail_url, decade) VALUES (?, ?, ?, ?)",
+                    "INSERT INTO quick_adds (youtube_id, title, thumbnail_url, decade) VALUES (%s, %s, %s, %s)",
                     (s["youtube_id"], s["title"], s["thumbnail_url"], None),
                 )
     else:
@@ -164,13 +163,14 @@ def _do_refresh(api_key: str) -> list[dict]:
             conn.execute("DELETE FROM quick_adds")
             for s in unique_songs:
                 conn.execute(
-                    "INSERT INTO quick_adds (youtube_id, title, thumbnail_url, decade) VALUES (?, ?, ?, ?)",
+                    "INSERT INTO quick_adds (youtube_id, title, thumbnail_url, decade) VALUES (%s, %s, %s, %s)",
                     (s["youtube_id"], s["title"], s["thumbnail_url"], s.get("decade")),
                 )
 
-    rows = get_connection().execute(
-        "SELECT youtube_id, title, thumbnail_url, decade FROM quick_adds ORDER BY rowid"
-    ).fetchall()
+    with get_connection() as conn:
+        rows = conn.execute(
+            "SELECT youtube_id, title, thumbnail_url, decade FROM quick_adds ORDER BY seq"
+        ).fetchall()
     return [dict(row) for row in rows]
 
 
@@ -197,16 +197,17 @@ def add_song(
             detail="couldn't recognize that YouTube link",
         )
 
-    conn = get_connection()
-    existing = conn.execute(
-        "SELECT id FROM songs WHERE youtube_id = ?", (video_id,)
-    ).fetchone()
+    with get_connection() as conn:
+        existing = conn.execute(
+            "SELECT id FROM songs WHERE youtube_id = %s", (video_id,)
+        ).fetchone()
 
     if existing:
         song_id = existing["id"]
         with transaction() as tx:
             tx.execute(
-                "INSERT OR IGNORE INTO votes (song_id, voter_id, created_at) VALUES (?, ?, ?)",
+                "INSERT INTO votes (song_id, voter_id, created_at) VALUES (%s, %s, %s) "
+                "ON CONFLICT (song_id, voter_id) DO NOTHING",
                 (song_id, identity.voter_id, _now()),
             )
         publish_sync("songs_changed")
@@ -220,7 +221,7 @@ def add_song(
     with transaction() as tx:
         tx.execute(
             "INSERT INTO songs (id, youtube_id, title, thumbnail_url, duration_seconds, added_by_name, added_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            "VALUES (%s, %s, %s, %s, %s, %s, %s)",
             (song_id, video_id, meta.title, meta.thumbnail_url, None, identity.display_name, _now()),
         )
 
@@ -237,20 +238,20 @@ def add_song(
 
 @app.get("/api/songs")
 def list_songs(identity: Identity = Depends(require_identity)) -> list[dict]:
-    conn = get_connection()
-    rows = conn.execute(
-        """
-        SELECT
-            s.id, s.youtube_id, s.title, s.thumbnail_url, s.added_by_name, s.added_at,
-            COUNT(v.voter_id) AS votes,
-            SUM(CASE WHEN v.voter_id = ? THEN 1 ELSE 0 END) AS did_i_vote_count
-        FROM songs s
-        LEFT JOIN votes v ON v.song_id = s.id
-        GROUP BY s.id
-        ORDER BY votes DESC, s.added_at ASC
-        """,
-        (identity.voter_id,),
-    ).fetchall()
+    with get_connection() as conn:
+        rows = conn.execute(
+            """
+            SELECT
+                s.id, s.youtube_id, s.title, s.thumbnail_url, s.added_by_name, s.added_at,
+                COUNT(v.voter_id) AS votes,
+                SUM(CASE WHEN v.voter_id = %s THEN 1 ELSE 0 END) AS did_i_vote_count
+            FROM songs s
+            LEFT JOIN votes v ON v.song_id = s.id
+            GROUP BY s.id
+            ORDER BY votes DESC, s.added_at ASC
+            """,
+            (identity.voter_id,),
+        ).fetchall()
     return [
         {
             "id": row["id"],
@@ -274,46 +275,49 @@ def toggle_vote(
     if not voting_is_open():
         raise HTTPException(status_code=403, detail="Voting has closed")
 
-    conn = get_connection()
-    exists = conn.execute("SELECT 1 FROM songs WHERE id = ?", (song_id,)).fetchone()
+    with get_connection() as conn:
+        exists = conn.execute(
+            "SELECT 1 FROM songs WHERE id = %s", (song_id,)
+        ).fetchone()
     if not exists:
         raise HTTPException(status_code=404, detail="song not found")
 
     with transaction() as tx:
         cur = tx.execute(
-            "DELETE FROM votes WHERE song_id = ? AND voter_id = ?",
+            "DELETE FROM votes WHERE song_id = %s AND voter_id = %s",
             (song_id, identity.voter_id),
         )
         if cur.rowcount == 0:
             tx.execute(
-                "INSERT INTO votes (song_id, voter_id, created_at) VALUES (?, ?, ?)",
+                "INSERT INTO votes (song_id, voter_id, created_at) VALUES (%s, %s, %s)",
                 (song_id, identity.voter_id, _now()),
             )
             did_i_vote = True
         else:
             did_i_vote = False
 
-    votes = conn.execute(
-        "SELECT COUNT(*) AS c FROM votes WHERE song_id = ?", (song_id,)
-    ).fetchone()["c"]
+    with get_connection() as conn:
+        votes = conn.execute(
+            "SELECT COUNT(*) AS c FROM votes WHERE song_id = %s", (song_id,)
+        ).fetchone()["c"]
     publish_sync("songs_changed")
     return {"id": song_id, "did_i_vote": did_i_vote, "votes": votes}
 
 
 @app.post("/api/play")
 def play(_: None = Depends(require_admin)) -> dict:
-    conn = get_connection()
-    rows = conn.execute(
-        """
-        SELECT s.id, s.youtube_id, s.title, s.thumbnail_url,
-               COUNT(v.voter_id) AS votes
-        FROM songs s
-        LEFT JOIN votes v ON v.song_id = s.id
-        GROUP BY s.id
-        ORDER BY votes DESC, s.added_at ASC
-        LIMIT 3
-        """
-    ).fetchall()
+    with get_connection() as conn:
+        rows = conn.execute(
+            """
+            SELECT s.id, s.youtube_id, s.title, s.thumbnail_url,
+                   COUNT(v.voter_id) AS votes
+            FROM songs s
+            LEFT JOIN votes v ON v.song_id = s.id
+            GROUP BY s.id
+            ORDER BY votes DESC, s.added_at ASC
+            LIMIT 3
+            """
+        ).fetchall()
     return {
         "queue": [
             {

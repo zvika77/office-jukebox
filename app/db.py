@@ -1,103 +1,58 @@
-import os
-import sqlite3
-from contextlib import contextmanager
-from typing import Iterator
+"""Postgres data access for Supabase.
 
-SCHEMA = """
-CREATE TABLE IF NOT EXISTS songs (
-    id TEXT PRIMARY KEY,
-    youtube_id TEXT NOT NULL UNIQUE,
-    title TEXT NOT NULL,
-    thumbnail_url TEXT NOT NULL,
-    duration_seconds INTEGER,
-    added_by_name TEXT NOT NULL,
-    added_at TIMESTAMP NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS votes (
-    song_id TEXT NOT NULL REFERENCES songs(id) ON DELETE CASCADE,
-    voter_id TEXT NOT NULL,
-    created_at TIMESTAMP NOT NULL,
-    PRIMARY KEY (song_id, voter_id)
-);
-
-CREATE TABLE IF NOT EXISTS quick_adds (
-    youtube_id TEXT PRIMARY KEY,
-    title TEXT NOT NULL,
-    thumbnail_url TEXT NOT NULL,
-    decade TEXT
-);
-
-CREATE TABLE IF NOT EXISTS settings (
-    key TEXT PRIMARY KEY,
-    value TEXT
-);
-
-CREATE INDEX IF NOT EXISTS idx_votes_song_id ON votes(song_id);
+Each operation opens a short-lived connection to the Supabase transaction-mode
+pooler (DATABASE_URL, port 6543) and closes it when done. This suits serverless
+invocations: there is no long-lived process to own a connection, and the pooler
+keeps server-side connections warm. Client-side prepared statements are disabled
+(prepare_threshold=None) because they do not survive transaction-mode pooling.
 """
 
+import os
+from contextlib import contextmanager
+from pathlib import Path
+from typing import Iterator
 
-def _migrate(conn: sqlite3.Connection) -> None:
-    """Apply pending migrations against an already-opened connection."""
-    # Migration: make quick_adds.decade nullable (old schema had NOT NULL).
-    cols = {row[1]: row for row in conn.execute("PRAGMA table_info(quick_adds)").fetchall()}
-    if "decade" in cols and cols["decade"][3]:  # notnull flag == 1
-        conn.executescript("""
-            CREATE TABLE quick_adds_new (
-                youtube_id TEXT PRIMARY KEY,
-                title TEXT NOT NULL,
-                thumbnail_url TEXT NOT NULL,
-                decade TEXT
-            );
-            INSERT INTO quick_adds_new SELECT youtube_id, title, thumbnail_url, decade FROM quick_adds;
-            DROP TABLE quick_adds;
-            ALTER TABLE quick_adds_new RENAME TO quick_adds;
-        """)
-        conn.commit()
+import psycopg
+from psycopg.rows import dict_row
+
+SCHEMA_PATH = Path(__file__).resolve().parent.parent / "schema.sql"
 
 
-def init_schema(conn: sqlite3.Connection) -> None:
-    conn.executescript(SCHEMA)
-    conn.commit()
-    _migrate(conn)
-
-
-def _connect(path: str) -> sqlite3.Connection:
-    conn = sqlite3.connect(path, check_same_thread=False)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys = ON")
-    return conn
-
-
-_singleton: sqlite3.Connection | None = None
-
-
-def get_connection() -> sqlite3.Connection:
-    """Process-wide SQLite connection. Lazily initialized + schema-ensured."""
-    global _singleton
-    if _singleton is None:
-        path = os.environ.get("DB_PATH", "jukebox.db")
-        # Ensure the parent directory exists (needed when DB_PATH is on a mounted volume).
-        parent = os.path.dirname(path)
-        if parent:
-            os.makedirs(parent, exist_ok=True)
-        _singleton = _connect(path)
-        init_schema(_singleton)
-    return _singleton
-
-
-def set_connection_for_tests(conn: sqlite3.Connection) -> None:
-    """Replace the process-wide connection (used by test fixtures)."""
-    global _singleton
-    _singleton = conn
+def _dsn() -> str:
+    dsn = os.environ.get("DATABASE_URL")
+    if not dsn:
+        raise RuntimeError("DATABASE_URL is not set")
+    return dsn
 
 
 @contextmanager
-def transaction() -> Iterator[sqlite3.Connection]:
-    conn = get_connection()
+def get_connection() -> Iterator[psycopg.Connection]:
+    """Read-friendly connection (autocommit). Closes on exit."""
+    conn = psycopg.connect(
+        _dsn(), autocommit=True, row_factory=dict_row, prepare_threshold=None
+    )
+    try:
+        yield conn
+    finally:
+        conn.close()
+
+
+@contextmanager
+def transaction() -> Iterator[psycopg.Connection]:
+    """Write connection. Commits on success, rolls back on error, then closes."""
+    conn = psycopg.connect(_dsn(), row_factory=dict_row, prepare_threshold=None)
     try:
         yield conn
         conn.commit()
     except Exception:
         conn.rollback()
         raise
+    finally:
+        conn.close()
+
+
+def apply_schema(conn: psycopg.Connection) -> None:
+    """Run schema.sql against an open connection. Caller commits if needed."""
+    sql = SCHEMA_PATH.read_text()
+    for statement in (s for s in sql.split(";") if s.strip()):
+        conn.execute(statement)
