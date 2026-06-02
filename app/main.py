@@ -64,19 +64,6 @@ def seed_quick_adds() -> None:
             )
 
 
-@app.on_event("startup")
-def on_startup() -> None:
-    seed_quick_adds()
-    api_key = os.environ.get("YOUTUBE_API_KEY", "").strip()
-    if api_key:
-        try:
-            _do_refresh(api_key)
-        except Exception as exc:
-            # Log but don't crash — the container should still come up
-            import sys
-            print(f"[startup] quick-add refresh failed (will retry on next /refresh): {exc}", file=sys.stderr)
-
-
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
