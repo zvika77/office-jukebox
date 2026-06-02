@@ -57,7 +57,7 @@ def seed_quick_adds() -> None:
         for entry in QUICK_ADDS:
             tx.execute(
                 "INSERT INTO quick_adds (youtube_id, title, thumbnail_url, decade) "
-                "VALUES (%s, %s, %s, %s)",
+                "VALUES (%s, %s, %s, %s) ON CONFLICT (youtube_id) DO NOTHING",
                 (
                     entry["youtube_id"],
                     entry["title"],

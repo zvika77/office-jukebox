@@ -21,8 +21,8 @@ def conn():
         c = psycopg.connect(TEST_DSN, autocommit=True)
     except psycopg.OperationalError:
         pytest.skip("No test Postgres reachable at TEST_DATABASE_URL")
-    c.execute("DROP TABLE IF EXISTS votes, songs, quick_adds, settings CASCADE")
-    apply_schema(c)
+    apply_schema(c)  # idempotent — CREATE TABLE IF NOT EXISTS
+    c.execute("TRUNCATE votes, songs, quick_adds, settings RESTART IDENTITY CASCADE")
     yield c
     c.close()
 
