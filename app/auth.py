@@ -13,7 +13,11 @@ domain logic is unit-testable without minting real tokens.
 import os
 from dataclasses import dataclass
 
-from fastapi import HTTPException
+from fastapi import Header, HTTPException
+from functools import lru_cache
+
+import jwt
+from jwt import PyJWKClient
 
 
 @dataclass(frozen=True)
@@ -45,3 +49,64 @@ def identity_from_claims(claims: dict, allowed_domain: str) -> Identity:
     meta = claims.get("user_metadata") or {}
     name = (meta.get("name") or meta.get("full_name") or email_raw).strip()
     return Identity(voter_id=str(sub), display_name=name[:80])
+
+
+def _jwks_url() -> str:
+    base = os.environ["SUPABASE_URL"].rstrip("/")
+    return f"{base}/auth/v1/.well-known/jwks.json"
+
+
+@lru_cache(maxsize=1)
+def _jwk_client() -> PyJWKClient:
+    # PyJWKClient caches fetched keys in-process, so cold starts pay one fetch.
+    return PyJWKClient(_jwks_url())
+
+
+def _signing_key_for(token: str):
+    """Return the public key that signed `token` (test seam — monkeypatched in tests)."""
+    return _jwk_client().get_signing_key_from_jwt(token).key
+
+
+def _decode(token: str) -> dict:
+    key = _signing_key_for(token)
+    return jwt.decode(
+        token,
+        key,
+        algorithms=["ES256"],
+        audience="authenticated",
+        options={"require": ["exp", "sub"]},
+    )
+
+
+def _bearer_token(authorization: str | None) -> str | None:
+    if not authorization:
+        return None
+    parts = authorization.split(" ", 1)
+    if len(parts) != 2 or parts[0].lower() != "bearer":
+        return None
+    return parts[1].strip() or None
+
+
+def require_identity(authorization: str | None = Header(default=None)) -> Identity:
+    """Verified @nexite.io identity for write endpoints. 401/403 when absent or foreign."""
+    token = _bearer_token(authorization)
+    if not token:
+        raise HTTPException(status_code=401, detail="sign in required")
+    try:
+        claims = _decode(token)
+    except jwt.PyJWTError:
+        raise HTTPException(status_code=401, detail="invalid or expired token")
+    return identity_from_claims(claims, _allowed_domain())
+
+
+def optional_identity(authorization: str | None = Header(default=None)) -> Identity | None:
+    """Identity for public reads. None when no/invalid token — never raises, so a
+    stale phone token can't break the anonymous TV read path."""
+    token = _bearer_token(authorization)
+    if not token:
+        return None
+    try:
+        claims = _decode(token)
+        return identity_from_claims(claims, _allowed_domain())
+    except (jwt.PyJWTError, HTTPException):
+        return None
