@@ -19,11 +19,18 @@ def test_identity_from_valid_nexite_claims():
     assert ident == Identity(voter_id="user-abc", display_name="Maya")
 
 
+def test_display_name_falls_back_to_full_name():
+    ident = identity_from_claims(
+        _claims(user_metadata={"full_name": "Maya Doe"}), "nexite.io"
+    )
+    assert ident.display_name == "Maya Doe"
+
+
 def test_display_name_falls_back_to_email_when_no_name():
     ident = identity_from_claims(
-        _claims(user_metadata={}), "nexite.io"
+        _claims(email="Maya@Nexite.IO", user_metadata={}), "nexite.io"
     )
-    assert ident.display_name == "maya@nexite.io"
+    assert ident.display_name == "Maya@Nexite.IO"
 
 
 def test_foreign_domain_is_rejected_403():

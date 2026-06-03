@@ -13,7 +13,7 @@ domain logic is unit-testable without minting real tokens.
 import os
 from dataclasses import dataclass
 
-from fastapi import Header, HTTPException
+from fastapi import HTTPException
 
 
 @dataclass(frozen=True)
