@@ -1,23 +1,8 @@
 # Office Jukebox
 
-LAN-only office jukebox. Coworkers paste YouTube links and upvote from their
-phones; one device (hooked to speakers) shows a live leaderboard and plays the
-top 4 on demand.
+Office jukebox for `nexite.io`. Coworkers paste YouTube links and upvote from their phones; one device (hooked to speakers) shows a live leaderboard and plays the top 3 on demand.
 
-## Quick start
-
-```sh
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-cp .env.example .env
-# edit .env: set ADMIN_TOKEN to a value only you know,
-# and set PUBLIC_URL to whatever your coworkers will type/scan
-# (e.g. http://my-laptop.local:8000 or http://192.168.1.42:8000)
-
-export $(grep -v '^#' .env | xargs) && \
-  uvicorn app.main:app --host 0.0.0.0 --port "${PORT:-8000}"
-```
+Deployed on **Vercel** (Python serverless) backed by **Supabase Postgres**.
 
 ## URLs
 
@@ -25,55 +10,81 @@ export $(grep -v '^#' .env | xargs) && \
 |---|---|---|
 | Phone view | `/` | What everyone scans from their phone. |
 | Jukebox view | `/jukebox` | Open on the laptop hooked to speakers. |
-| Jukebox view (admin) | `/jukebox?admin=<token>` | Adds Play / Reset / Skip / Stop buttons. |
+| Jukebox view (admin) | `/jukebox?admin=<token>` | Adds Play / Reset / Skip / Stop / Set deadline buttons. |
 | Health check | `/healthz` | |
 
-## Finding the right URL on your network
+## Deployment (Vercel)
 
-On macOS / most modern Linux, your hostname is reachable as
-`<hostname>.local` (mDNS). Set `PUBLIC_URL` in `.env` to e.g.
-`http://my-laptop.local:8000` and that's what the QR code will encode.
+1. **Create a Supabase project** (free tier). From Dashboard → Connect, copy:
+   - **Session pooler URI** (port `5432`) — for local dev / tests
+   - **Transaction pooler URI** (port `6543`) — for `DATABASE_URL` on Vercel
 
-If `.local` doesn't work on your network, use your machine's LAN IP
-(`ipconfig getifaddr en0` on macOS).
+2. **Apply the schema** (run once against Supabase):
+   ```sh
+   DATABASE_URL=<session-pooler-uri> python scripts/init_db.py
+   ```
+   This creates the tables and seeds the curated quick-add list. Idempotent — safe to re-run.
 
-## Manual smoke test
+3. **Set Vercel environment variables** (Dashboard → Project → Settings → Environment Variables):
+   | Variable | Value |
+   |---|---|
+   | `DATABASE_URL` | Supabase **transaction pooler** URI (port `6543`) |
+   | `ADMIN_TOKEN` | A secret only you know |
+   | `PUBLIC_URL` | The deployed Vercel URL (e.g. `https://office-jukebox.vercel.app`) |
+   | `YOUTUBE_API_KEY` | YouTube Data API v3 key (enables "Refresh suggestions") |
+   | `YOUTUBE_PLAYLIST_ID` | Optional — playlist source for quick-adds |
 
-1. Start the server. Open `/jukebox` on the laptop and confirm the QR code
-   appears.
-2. From a phone on the same WiFi, scan the QR. Confirm the phone view loads
-   and the name prompt shows.
-3. Pick a name, paste a YouTube link. Confirm the song appears on the
-   jukebox screen within ~1s.
-4. Tap a decade chip and pick a quick-add. Confirm it appears.
-5. Add the same link again. Confirm the "already in the list — upvoted"
-   message and that the heart is filled.
-6. From a second phone, upvote a song. Confirm the count updates on both
-   screens.
-7. On the laptop, open `/jukebox?admin=<token>` and click "Play top 4".
-   Confirm each video plays in sequence and auto-advances when it ends.
-8. Click Skip mid-song. Confirm the next video starts.
-9. Click Stop. Confirm return to idle.
-10. Click "Reset for tomorrow". Confirm both screens empty out.
+4. **Deploy:** Push to the Vercel-connected branch (or run `vercel --prod`).
+
+## Local development
+
+```sh
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env
+# edit .env: set DATABASE_URL, ADMIN_TOKEN, etc.
+
+source .env && uvicorn app.main:app --host 0.0.0.0 --port "${PORT:-8000}" --reload
+```
+
+For local dev you can point `DATABASE_URL` at your Supabase session pooler, or run a local Postgres:
+
+```sh
+docker run -d --name jukebox-dev -e POSTGRES_PASSWORD=postgres -p 5432:5432 postgres:16
+# DATABASE_URL=postgresql://postgres:postgres@localhost:5432/postgres python scripts/init_db.py
+```
+
+## Running tests
+
+The test suite connects to a real Postgres database. Point `TEST_DATABASE_URL` at a test database (not your production database — tests truncate all tables on every run).
+
+```sh
+# Option A: local Docker Postgres (recommended for isolation)
+docker run -d --name jukebox-test -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=jukebox_test -p 5432:5432 postgres:16
+
+# Option B: Supabase (works fine since there's no data to preserve)
+# Add TEST_DATABASE_URL=<session-pooler-uri> to .env
+
+.venv/bin/pytest
+```
+
+DB-dependent tests skip gracefully when `TEST_DATABASE_URL` is unreachable. Pure unit tests (YouTube URL parser, identity, admin token) always run.
+
+## Known behaviour
+
+- **Supabase free tier pauses** the database after ~7 days of inactivity. The first request wakes it (a few seconds delay). Normal for weekly use.
+- **Vercel cold starts** add ~1–3s to the first request after a long idle period. Acceptable for an office tool.
+- Voting updates propagate via ~4s polling on both the phone and TV views.
 
 ## Configuration (`.env`)
 
 | Variable | Purpose |
 |---|---|
-| `ADMIN_TOKEN` | Required. Shared secret for `/api/play`, `/api/reset`, `/jukebox?admin=…`. |
-| `PUBLIC_URL` | The URL the QR code encodes. Defaults to `http://localhost:8000`. |
-| `PORT` | Defaults to 8000. |
-| `DB_PATH` | SQLite file path. Defaults to `jukebox.db`. |
-
-## Running tests
-
-```sh
-.venv/bin/pytest
-```
-
-## Portability
-
-The whole app is one FastAPI process + one SQLite file. To move to a
-Raspberry Pi or a small cloud box later, copy the project, install the
-deps, set `.env`, and run the same `uvicorn` command. No other
-infrastructure changes.
+| `DATABASE_URL` | **Required.** Supabase transaction pooler URI (port `6543`) or any Postgres URI. |
+| `ADMIN_TOKEN` | **Required.** Shared secret for admin endpoints and the jukebox admin view. |
+| `PUBLIC_URL` | The URL the QR code encodes. Defaults to the detected LAN IP. |
+| `PORT` | HTTP port for local dev. Defaults to 8000. |
+| `YOUTUBE_API_KEY` | Enables `POST /api/quick-adds/refresh` and the "Refresh suggestions" button. |
+| `YOUTUBE_PLAYLIST_ID` | Playlist to pull quick-adds from. If unset, falls back to curated decade search. |
+| `TEST_DATABASE_URL` | Postgres URI for the test suite. Defaults to `postgresql://postgres:postgres@localhost:5432/jukebox_test`. |
