@@ -124,9 +124,13 @@ async function loadDeadline() {
         if (body.server_now) {
             _serverOffsetMs = new Date(body.server_now).getTime() - Date.now();
         }
-        // Keep the admin's input box in sync with the stored deadline.
+        // Keep the admin's input box in sync with the stored deadline, but
+        // never while it's focused — otherwise the 4s poll clobbers whatever
+        // time the admin is currently picking and it snaps back every tick.
         const input = document.getElementById("deadline-input");
-        if (input && _deadline) input.value = toLocalInput(_deadline);
+        if (input && _deadline && document.activeElement !== input) {
+            input.value = toLocalInput(_deadline);
+        }
         updateCountdown();
     } catch {
         /* ignore network hiccups; the ticker keeps the last known state */
