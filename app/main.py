@@ -12,7 +12,7 @@ from pydantic import BaseModel
 
 from app.admin import require_admin
 from app.db import get_connection, transaction
-from app.identity import Identity, require_identity
+from app.auth import Identity, optional_identity, require_identity
 from app.seed_data import QUICK_ADDS, thumbnail_for
 from app.voting import get_deadline, set_deadline, voting_is_open
 from app.youtube import (
@@ -219,7 +219,8 @@ def add_song(
 
 
 @app.get("/api/songs")
-def list_songs(identity: Identity = Depends(require_identity)) -> list[dict]:
+def list_songs(identity: Identity | None = Depends(optional_identity)) -> list[dict]:
+    voter_id = identity.voter_id if identity else None
     with get_connection() as conn:
         rows = conn.execute(
             """
@@ -232,7 +233,7 @@ def list_songs(identity: Identity = Depends(require_identity)) -> list[dict]:
             GROUP BY s.id
             ORDER BY votes DESC, s.added_at ASC
             """,
-            (identity.voter_id,),
+            (voter_id,),
         ).fetchall()
     return [
         {
