@@ -21,6 +21,21 @@ function tabataSrc() {
     return `https://simpletouchsoftware.com/timers/tabatapro/?${q.toString()}`;
 }
 
+// The Tabata page won't reflow into a narrow column — it keeps its wide layout
+// and clips. So render it at this fixed logical width and scale the whole frame
+// down to fit the pane. Bump this down to make the timer appear larger.
+const TABATA_LOGICAL_WIDTH = 1100;
+
+function fitTabata() {
+    const pane = document.getElementById("tabata-pane");
+    const frame = document.getElementById("tabata-frame");
+    if (!pane || !frame || pane.clientWidth === 0) return;
+    const scale = pane.clientWidth / TABATA_LOGICAL_WIDTH;
+    frame.style.width = `${TABATA_LOGICAL_WIDTH}px`;
+    frame.style.height = `${pane.clientHeight / scale}px`;
+    frame.style.transform = `scale(${scale})`;
+}
+
 async function fetchSongs() {
     const response = await fetch("/api/songs");
     return response.json();
@@ -152,6 +167,7 @@ function showPlayer(on) {
     // on stop so its countdown beeps don't keep running in the background.
     const frame = document.getElementById("tabata-frame");
     frame.src = on ? tabataSrc() : "about:blank";
+    if (on) fitTabata();
 }
 
 function playCurrent() {
@@ -264,3 +280,4 @@ loadDeadline();
 setInterval(refresh, 4000);
 setInterval(loadDeadline, 4000);
 setInterval(updateCountdown, 1000);
+window.addEventListener("resize", fitTabata);

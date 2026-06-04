@@ -46,7 +46,11 @@ body { margin: 0; font-family: system-ui, -apple-system, sans-serif; background:
 #player.active { display: flex; }
 #player #video-pane { position: relative; flex: 1 1 auto; min-width: 0; }
 #player #yt-target { width: 100%; height: 100%; }
-#player #tabata-frame { flex: 0 0 26%; min-width: 320px; height: 100%; border: none; background: #000; }
+#player #tabata-pane { flex: 0 0 26%; min-width: 320px; height: 100%; overflow: hidden; background: #000; }
+/* The Tabata page is sized for a wide screen, so we render it at a fixed logical
+   width and scale it down (via JS) to fit the pane — width/height/transform are
+   set inline by fitTabata(). */
+#player #tabata-frame { border: none; background: #000; transform-origin: top left; }
 /* Override .admin-actions' fixed positioning so Skip/Stop anchor to the video pane,
    not the viewport — otherwise they'd land on top of the Tabata panel. */
 #player #player-actions { position: absolute; }
