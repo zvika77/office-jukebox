@@ -1,11 +1,6 @@
 const params = new URLSearchParams(location.search);
 const adminToken = params.get("admin");
 
-const identityHeaders = {
-    "X-Voter-Id": "jukebox-screen",
-    "X-Display-Name": "Jukebox",
-};
-
 let ytPlayer = null;
 let queue = [];
 let queueIndex = 0;
@@ -14,7 +9,7 @@ let _deadline = null;       // Date, or null when voting is open forever
 let _serverOffsetMs = 0;    // server clock minus this device's clock
 
 async function fetchSongs() {
-    const response = await fetch("/api/songs", { headers: identityHeaders });
+    const response = await fetch("/api/songs");
     return response.json();
 }
 
