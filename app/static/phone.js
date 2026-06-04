@@ -1,42 +1,21 @@
-const VOTER_KEY = "jukebox.voter_id";
-const NAME_KEY = "jukebox.display_name";
-
 let _deadline = null;        // Date, or null when voting is open forever
 let _serverOffsetMs = 0;     // server clock minus this device's clock
 let _votingOpen = true;      // false once the deadline passes
 let _latestSongs = [];       // last songs payload, for re-render on tick/state flip
 
-function uuid() {
-    if (typeof crypto.randomUUID === "function") return crypto.randomUUID();
-    return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
-        const r = (Math.random() * 16) | 0;
-        return (c === "x" ? r : (r & 0x3) | 0x8).toString(16);
-    });
+// Headers for write requests: attach the Google session JWT as a Bearer token.
+async function authHeaders() {
+    const headers = { "Content-Type": "application/json" };
+    const token = await getToken();
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+    return headers;
 }
 
-function getVoterId() {
-    let id = localStorage.getItem(VOTER_KEY);
-    if (!id) {
-        id = uuid();
-        localStorage.setItem(VOTER_KEY, id);
-    }
-    return id;
-}
-
-function getDisplayName() {
-    return localStorage.getItem(NAME_KEY) || "";
-}
-
-function setDisplayName(name) {
-    localStorage.setItem(NAME_KEY, name);
-}
-
-function identityHeaders() {
-    return {
-        "X-Voter-Id": getVoterId(),
-        "X-Display-Name": getDisplayName(),
-        "Content-Type": "application/json",
-    };
+// Headers for the song read: include the token when signed in so the
+// did_i_vote hearts personalize; the read works fine without it.
+async function readHeaders() {
+    const token = await getToken();
+    return token ? { "Authorization": `Bearer ${token}` } : {};
 }
 
 function showMessage(text, kind = "info") {
@@ -49,7 +28,7 @@ function showMessage(text, kind = "info") {
 }
 
 async function loadSongs() {
-    const response = await fetch("/api/songs", { headers: identityHeaders() });
+    const response = await fetch("/api/songs", { headers: await readHeaders() });
     if (!response.ok) return;
     const songs = await response.json();
     renderSongs(songs);
@@ -158,7 +137,7 @@ function renderSongs(songs) {
 async function toggleVote(songId) {
     const response = await fetch(`/api/songs/${songId}/vote`, {
         method: "POST",
-        headers: identityHeaders(),
+        headers: await authHeaders(),
     });
     if (response.status === 403) {
         showMessage("Voting has closed", "error");
@@ -172,7 +151,7 @@ async function toggleVote(songId) {
 async function addByUrl(url) {
     const response = await fetch("/api/songs", {
         method: "POST",
-        headers: identityHeaders(),
+        headers: await authHeaders(),
         body: JSON.stringify({ youtube_url: url }),
     });
     if (response.status === 403) {
@@ -260,23 +239,21 @@ function setupAddRow() {
     });
 }
 
-function setupRename() {
-    document.getElementById("rename").addEventListener("click", (e) => {
+function setupSignOut() {
+    document.getElementById("signout").addEventListener("click", async (e) => {
         e.preventDefault();
-        const name = prompt("New display name:", getDisplayName());
-        if (name && name.trim()) {
-            setDisplayName(name.trim());
-            document.getElementById("who-am-i").textContent = name.trim();
-        }
+        await signOut();
+        location.reload();
     });
 }
 
 function startApp() {
-    document.getElementById("name-prompt").hidden = true;
+    document.getElementById("signin-gate").hidden = true;
     document.getElementById("app").hidden = false;
-    document.getElementById("who-am-i").textContent = getDisplayName();
+    const user = currentUser();
+    document.getElementById("who-am-i").textContent = user ? user.name : "";
     setupAddRow();
-    setupRename();
+    setupSignOut();
     loadQuickAdds();
     loadSongs();
     loadDeadline();
@@ -286,23 +263,34 @@ function startApp() {
     document.getElementById("btn-refresh-suggestions").addEventListener("click", refreshQuickAdds);
 }
 
-function setupNamePrompt() {
-    const submit = document.getElementById("name-submit");
-    const input = document.getElementById("name-input");
-    submit.addEventListener("click", () => {
-        const name = input.value.trim();
-        if (!name) return;
-        setDisplayName(name);
-        startApp();
-    });
-    input.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") submit.click();
-    });
+let _appStarted = false;
+let _gateShown = false;
+
+function showSignInGate() {
+    if (_gateShown) return;
+    _gateShown = true;
+    const gate = document.getElementById("signin-gate");
+    gate.hidden = false;
+    document.getElementById("google-signin").addEventListener("click", () => signIn());
 }
 
-if (getDisplayName()) {
-    startApp();
-} else {
-    document.getElementById("name-prompt").hidden = false;
-    setupNamePrompt();
+function renderForUser(user) {
+    if (user && !_appStarted) {
+        _appStarted = true;
+        startApp();
+    } else if (!user) {
+        showSignInGate();
+    }
 }
+
+async function boot() {
+    let user = null;
+    try {
+        user = await initAuth(renderForUser);
+    } catch (e) {
+        showMessage("Sign-in is unavailable right now", "error");
+    }
+    renderForUser(user);
+}
+
+boot();
