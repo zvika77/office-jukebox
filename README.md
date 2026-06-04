@@ -88,3 +88,34 @@ DB-dependent tests skip gracefully when `TEST_DATABASE_URL` is unreachable. Pure
 | `YOUTUBE_API_KEY` | Enables `POST /api/quick-adds/refresh` and the "Refresh suggestions" button. |
 | `YOUTUBE_PLAYLIST_ID` | Playlist to pull quick-adds from. If unset, falls back to curated decade search. |
 | `TEST_DATABASE_URL` | Postgres URI for the test suite. Defaults to `postgresql://postgres:postgres@localhost:5432/jukebox_test`. |
+
+## Authentication (Google sign-in)
+
+Voters sign in with a Google `@nexite.io` account via Supabase Auth. Admin and
+the TV kiosk are unaffected (they use `ADMIN_TOKEN` / no login). Reads are public;
+all writes require a verified `@nexite.io` token.
+
+### Environment variables
+
+| Var | Where | Purpose |
+|-----|-------|---------|
+| `SUPABASE_URL` | Vercel | Supabase project URL — used for JWKS verification and exposed to the frontend via `/api/config`. |
+| `SUPABASE_ANON_KEY` | Vercel | Public anon key — exposed to the frontend via `/api/config`. |
+| `ALLOWED_EMAIL_DOMAIN` | Vercel (optional) | Allowed email domain. Defaults to `nexite.io`. |
+
+There is **no** `SUPABASE_JWT_SECRET` — tokens are verified asymmetrically against
+Supabase's published public keys (ES256 via the JWKS endpoint).
+
+### One-time setup
+
+**Google Cloud Console:**
+1. Create an OAuth 2.0 Client ID (type: Web application).
+2. Authorized redirect URI: `https://<project>.supabase.co/auth/v1/callback`.
+3. Copy the Client ID and Client Secret.
+
+**Supabase Console:**
+1. Authentication → Providers → Google: enable, paste the Client ID + Secret.
+2. Authentication → URL Configuration → Site URL: `https://office-jukebox.vercel.app`.
+
+**Vercel:** add `SUPABASE_URL` and `SUPABASE_ANON_KEY` (and optionally
+`ALLOWED_EMAIL_DOMAIN`) to the project's environment variables, then redeploy.
