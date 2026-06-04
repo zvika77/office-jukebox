@@ -306,7 +306,13 @@ Expected: FAIL — `ImportError: cannot import name 'require_identity'` / `'opti
 
 - [ ] **Step 3: Add the verification path and dependencies to `app/auth.py`**
 
-Add these imports at the top of `app/auth.py` (below the existing `from fastapi import ...` line):
+First restore the `Header` import the dependencies need — change the existing fastapi import line from `from fastapi import HTTPException` to:
+
+```python
+from fastapi import Header, HTTPException
+```
+
+Then add these imports at the top of `app/auth.py` (below that fastapi import line):
 
 ```python
 from functools import lru_cache
