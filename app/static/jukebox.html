@@ -30,12 +30,15 @@
         </div>
 
         <div id="player">
-            <div id="yt-target"></div>
-            <div class="now-playing" id="now-playing"></div>
-            <div class="admin-actions" id="player-actions" hidden>
-                <button class="btn-play" id="btn-skip">&#9197; Skip</button>
-                <button class="btn-reset" id="btn-stop">&#9632; Stop</button>
+            <div id="video-pane">
+                <div id="yt-target"></div>
+                <div class="now-playing" id="now-playing"></div>
+                <div class="admin-actions" id="player-actions" hidden>
+                    <button class="btn-play" id="btn-skip">&#9197; Skip</button>
+                    <button class="btn-reset" id="btn-stop">&#9632; Stop</button>
+                </div>
             </div>
+            <iframe id="tabata-frame" title="Tabata timer" allow="autoplay"></iframe>
         </div>
     </div>
     <script src="/static/jukebox.js"></script>

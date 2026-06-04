@@ -8,6 +8,19 @@ let queueIndex = 0;
 let _deadline = null;       // Date, or null when voting is open forever
 let _serverOffsetMs = 0;    // server clock minus this device's clock
 
+// The Tabata Pro timer embedded next to the video during playback. Any of these
+// params can be overridden by adding them to the jukebox page URL, e.g.
+// ?work=45&rest=15&cycles=8 — anything not supplied falls back to the default.
+const TABATA_DEFAULTS = { name: "Tabata", prep: "10", work: "60", rest: "30", cycles: "5", tabatas: "1" };
+
+function tabataSrc() {
+    const q = new URLSearchParams();
+    for (const [key, fallback] of Object.entries(TABATA_DEFAULTS)) {
+        q.set(key, params.get(key) ?? fallback);
+    }
+    return `https://simpletouchsoftware.com/timers/tabatapro/?${q.toString()}`;
+}
+
 async function fetchSongs() {
     const response = await fetch("/api/songs");
     return response.json();
@@ -135,6 +148,10 @@ async function loadDeadline() {
 function showPlayer(on) {
     document.getElementById("player").classList.toggle("active", on);
     document.getElementById("player-actions").hidden = !on || !adminToken;
+    // (Re)load a fresh Tabata timer beside the video each session; blank it out
+    // on stop so its countdown beeps don't keep running in the background.
+    const frame = document.getElementById("tabata-frame");
+    frame.src = on ? tabataSrc() : "about:blank";
 }
 
 function playCurrent() {

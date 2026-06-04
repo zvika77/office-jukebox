@@ -43,6 +43,11 @@ body { margin: 0; font-family: system-ui, -apple-system, sans-serif; background:
 .btn-reset { background: #c9302c; color: white; }
 
 #player { position: fixed; inset: 0; background: black; z-index: 100; display: none; }
-#player.active { display: block; }
+#player.active { display: flex; }
+#player #video-pane { position: relative; flex: 1 1 auto; min-width: 0; }
 #player #yt-target { width: 100%; height: 100%; }
+#player #tabata-frame { flex: 0 0 26%; min-width: 320px; height: 100%; border: none; background: #000; }
+/* Override .admin-actions' fixed positioning so Skip/Stop anchor to the video pane,
+   not the viewport — otherwise they'd land on top of the Tabata panel. */
+#player #player-actions { position: absolute; }
 #player .now-playing { position: absolute; bottom: 32px; left: 32px; background: rgba(0,0,0,0.7); padding: 16px 24px; border-radius: 8px; font-size: 1.5rem; }
