@@ -77,3 +77,22 @@ def test_list_songs_sorted_by_votes_then_added_at(client, httpx_mock):
     assert listing[1]["id"] == a["id"]
     assert listing[1]["votes"] == 0
     assert all(row["did_i_vote"] is False for row in listing)
+
+
+def test_list_songs_anonymous_read_is_public(client, httpx_mock):
+    # The TV reads /api/songs without signing in: no auth headers at all.
+    httpx_mock.add_response(json={"title": "A", "thumbnail_url": "x"})
+    song = client.post(
+        "/api/songs",
+        json={"youtube_url": "https://youtu.be/aaaaaaaaaaa"},
+        headers=_headers("v-1", "Maya"),
+    ).json()
+    client.post(f"/api/songs/{song['id']}/vote", headers=_headers("v-2", "Dan"))
+
+    response = client.get("/api/songs")  # no Authorization / voter headers
+    assert response.status_code == 200
+    listing = response.json()
+    matching = next(row for row in listing if row["id"] == song["id"])
+    assert matching["votes"] == 1
+    # Anonymous reader has no voter_id, so did_i_vote is always False.
+    assert matching["did_i_vote"] is False
