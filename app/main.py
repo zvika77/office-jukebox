@@ -90,6 +90,15 @@ def list_quick_adds() -> list[dict]:
     return [dict(row) for row in rows]
 
 
+@app.get("/api/config")
+def get_config() -> dict[str, str]:
+    """Public Supabase values the frontend needs to boot supabase-js."""
+    return {
+        "supabase_url": os.environ.get("SUPABASE_URL", ""),
+        "supabase_anon_key": os.environ.get("SUPABASE_ANON_KEY", ""),
+    }
+
+
 _DECADES = ["60s", "70s", "80s", "90s", "2000s", "2010s"]
 
 
