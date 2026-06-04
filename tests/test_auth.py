@@ -1,7 +1,18 @@
-import pytest
-from fastapi import HTTPException
+from datetime import datetime, timedelta, timezone
 
-from app.auth import Identity, identity_from_claims
+import jwt
+import pytest
+from cryptography.hazmat.primitives.asymmetric import ec
+from fastapi import Depends, FastAPI, HTTPException
+from fastapi.testclient import TestClient
+
+import app.auth as auth_module
+from app.auth import (
+    Identity,
+    identity_from_claims,
+    optional_identity,
+    require_identity,
+)
 
 
 def _claims(**over) -> dict:
@@ -55,17 +66,6 @@ def test_domain_check_is_case_insensitive():
     ident = identity_from_claims(_claims(email="Maya@Nexite.IO"), "nexite.io")
     assert ident.voter_id == "user-abc"
     assert ident.display_name == "Maya"
-
-
-from datetime import datetime, timedelta, timezone
-
-import jwt
-from cryptography.hazmat.primitives.asymmetric import ec
-from fastapi import Depends, FastAPI
-from fastapi.testclient import TestClient
-
-import app.auth as auth_module
-from app.auth import optional_identity, require_identity
 
 
 @pytest.fixture
@@ -129,6 +129,15 @@ def test_required_with_bad_signature_is_401(monkeypatch, es256_keys):
     monkeypatch.setattr(auth_module, "_signing_key_for", lambda token: pub)
     client = TestClient(_verify_app())
     token = _mint(other)  # signed with a key the verifier won't accept
+    resp = client.get("/required", headers={"Authorization": f"Bearer {token}"})
+    assert resp.status_code == 401
+
+
+def test_required_rejects_expired_token_401(monkeypatch, es256_keys):
+    priv, pub = es256_keys
+    monkeypatch.setattr(auth_module, "_signing_key_for", lambda token: pub)
+    client = TestClient(_verify_app())
+    token = _mint(priv, exp=datetime.now(timezone.utc) - timedelta(hours=1))
     resp = client.get("/required", headers={"Authorization": f"Bearer {token}"})
     assert resp.status_code == 401
 

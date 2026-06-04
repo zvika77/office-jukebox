@@ -52,8 +52,10 @@ def identity_from_claims(claims: dict, allowed_domain: str) -> Identity:
 
 
 def _jwks_url() -> str:
-    base = os.environ["SUPABASE_URL"].rstrip("/")
-    return f"{base}/auth/v1/.well-known/jwks.json"
+    base = os.environ.get("SUPABASE_URL")
+    if not base:
+        raise RuntimeError("SUPABASE_URL is not set")
+    return f"{base.rstrip('/')}/auth/v1/.well-known/jwks.json"
 
 
 @lru_cache(maxsize=1)
