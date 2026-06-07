@@ -168,7 +168,7 @@ def _do_refresh(api_key: str) -> list[dict]:
 
 
 @app.post("/api/quick-adds/refresh")
-def refresh_quick_adds() -> list[dict]:
+def refresh_quick_adds(_: Identity = Depends(require_identity)) -> list[dict]:
     api_key = os.environ.get("YOUTUBE_API_KEY", "").strip()
     if not api_key:
         raise HTTPException(status_code=503, detail="YOUTUBE_API_KEY not set in server config")

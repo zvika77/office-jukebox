@@ -29,3 +29,12 @@ CREATE TABLE IF NOT EXISTS settings (
 );
 
 CREATE INDEX IF NOT EXISTS idx_votes_song_id ON votes(song_id);
+
+-- Lock the auto-generated Supabase REST API (PostgREST) out of these tables.
+-- The app connects directly as the `postgres` owner, which bypasses RLS, so this
+-- only blocks the public anon/authenticated roles. With RLS enabled and no
+-- policies, those roles get zero access — closing the anon-key REST back door.
+ALTER TABLE songs      ENABLE ROW LEVEL SECURITY;
+ALTER TABLE votes      ENABLE ROW LEVEL SECURITY;
+ALTER TABLE quick_adds ENABLE ROW LEVEL SECURITY;
+ALTER TABLE settings   ENABLE ROW LEVEL SECURITY;

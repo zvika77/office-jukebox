@@ -1,3 +1,4 @@
+import hmac
 import os
 
 from fastapi import Header, HTTPException, Query
@@ -11,5 +12,6 @@ def require_admin(
     if not configured:
         raise HTTPException(status_code=500, detail="ADMIN_TOKEN not configured")
     provided = x_admin_token or admin
-    if provided != configured:
+    # Constant-time compare so the token can't be recovered by response timing.
+    if not provided or not hmac.compare_digest(provided, configured):
         raise HTTPException(status_code=403, detail="admin token required")

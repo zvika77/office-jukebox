@@ -177,7 +177,7 @@ async function refreshQuickAdds() {
     btn.textContent = "↻ Refreshing…";
     btn.disabled = true;
     try {
-        const response = await fetch("/api/quick-adds/refresh", { method: "POST" });
+        const response = await fetch("/api/quick-adds/refresh", { method: "POST", headers: await authHeaders() });
         if (response.ok) {
             const rows = await response.json();
             renderQuickAdds(rows);

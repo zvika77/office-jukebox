@@ -1,6 +1,13 @@
 const params = new URLSearchParams(location.search);
 const adminToken = params.get("admin");
 
+// Keep the admin token out of the address bar and browser history once we've read it.
+if (adminToken) {
+    const cleaned = new URL(location.href);
+    cleaned.searchParams.delete("admin");
+    history.replaceState({}, "", cleaned);
+}
+
 let ytPlayer = null;
 let queue = [];
 let queueIndex = 0;
@@ -223,8 +230,9 @@ window.onYouTubeIframeAPIReady = function () {
 
 async function startPlayback() {
     if (!adminToken) return;
-    const response = await fetch(`/api/play?admin=${encodeURIComponent(adminToken)}`, {
+    const response = await fetch("/api/play", {
         method: "POST",
+        headers: { "X-Admin-Token": adminToken },
     });
     if (!response.ok) return;
     const body = await response.json();
@@ -245,14 +253,11 @@ async function setDeadline() {
     }
     // datetime-local is local time; toISOString() converts it to UTC for the server.
     const iso = new Date(value).toISOString();
-    const response = await fetch(
-        `/api/voting-deadline?admin=${encodeURIComponent(adminToken)}`,
-        {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ deadline: iso }),
-        },
-    );
+    const response = await fetch("/api/voting-deadline", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Admin-Token": adminToken },
+        body: JSON.stringify({ deadline: iso }),
+    });
     if (!response.ok) {
         showToast("Couldn't set the deadline");
         return;
@@ -266,7 +271,7 @@ function setupAdmin() {
     document.getElementById("btn-play").addEventListener("click", startPlayback);
     document.getElementById("btn-reset").addEventListener("click", async () => {
         if (!confirm("Wipe all songs and votes for today?")) return;
-        await fetch(`/api/reset?admin=${encodeURIComponent(adminToken)}`, { method: "POST" });
+        await fetch("/api/reset", { method: "POST", headers: { "X-Admin-Token": adminToken } });
     });
     document.getElementById("btn-set-deadline").addEventListener("click", setDeadline);
     document.getElementById("btn-skip").addEventListener("click", advance);
