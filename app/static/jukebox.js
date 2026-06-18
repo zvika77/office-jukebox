@@ -19,15 +19,19 @@ let _serverOffsetMs = 0;    // server clock minus this device's clock
 // params can be overridden by adding them to the jukebox page URL, e.g.
 // ?work=45&rest=15&cycles=8 — anything not supplied falls back to the default.
 const TABATA_DEFAULTS = { name: "Tabata", prep: "10", work: "60", rest: "30", cycles: "5", tabatas: "1" };
+const TABATA_DEFAULT_BASE = "https://simpletouchsoftware.com/timers/tabatapro";
+const TABATA_STORAGE_KEY = "tabata_url";
 
 function tabataSrc() {
+    const stored = localStorage.getItem(TABATA_STORAGE_KEY);
+    if (stored) return stored;
     const q = new URLSearchParams();
     for (const [key, fallback] of Object.entries(TABATA_DEFAULTS)) {
         q.set(key, params.get(key) ?? fallback);
     }
     // Note: no trailing slash before "?" — the trailing-slash variant 302-redirects
     // to the (http) homepage, which breaks the iframe embed.
-    return `https://simpletouchsoftware.com/timers/tabatapro?${q.toString()}`;
+    return `${TABATA_DEFAULT_BASE}?${q.toString()}`;
 }
 
 // The Tabata page won't reflow into a narrow column — it keeps its wide layout
@@ -278,6 +282,15 @@ function setupAdmin() {
     document.getElementById("btn-set-deadline").addEventListener("click", setDeadline);
     document.getElementById("btn-skip").addEventListener("click", advance);
     document.getElementById("btn-stop").addEventListener("click", stopPlayback);
+
+    const tabataInput = document.getElementById("tabata-url-input");
+    tabataInput.value = localStorage.getItem(TABATA_STORAGE_KEY) ?? tabataSrc();
+    document.getElementById("btn-save-tabata-url").addEventListener("click", () => {
+        const url = tabataInput.value.trim();
+        if (!url) return;
+        localStorage.setItem(TABATA_STORAGE_KEY, url);
+        showToast("Timer URL saved");
+    });
 }
 
 document.getElementById("public-url").textContent = location.origin;
