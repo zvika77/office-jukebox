@@ -25,7 +25,9 @@ function tabataSrc() {
     for (const [key, fallback] of Object.entries(TABATA_DEFAULTS)) {
         q.set(key, params.get(key) ?? fallback);
     }
-    return `https://simpletouchsoftware.com/timers/tabatapro/?${q.toString()}`;
+    // Note: no trailing slash before "?" — the trailing-slash variant 302-redirects
+    // to the (http) homepage, which breaks the iframe embed.
+    return `https://simpletouchsoftware.com/timers/tabatapro?${q.toString()}`;
 }
 
 // The Tabata page won't reflow into a narrow column — it keeps its wide layout
