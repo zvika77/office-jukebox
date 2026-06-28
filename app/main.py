@@ -14,7 +14,7 @@ from app.admin import require_admin
 from app.db import get_connection, transaction
 from app.auth import Identity, optional_identity, require_identity
 from app.seed_data import QUICK_ADDS, thumbnail_for
-from app.voting import get_deadline, set_deadline, voting_is_open
+from app.voting import get_deadline, next_day_deadline, set_deadline, voting_is_open
 from app.youtube import (
     YouTubeAPIError,
     extract_playlist_id,
@@ -216,6 +216,11 @@ def add_song(
             "VALUES (%s, %s, %s, %s, %s, %s, %s)",
             (song_id, video_id, meta.title, meta.thumbnail_url, None, identity.display_name, _now()),
         )
+        # The person adding a song counts as its first vote, same as upvoting an existing one.
+        tx.execute(
+            "INSERT INTO votes (song_id, voter_id, created_at) VALUES (%s, %s, %s)",
+            (song_id, identity.voter_id, _now()),
+        )
 
     return {
         "id": song_id,
@@ -328,8 +333,8 @@ def reset_day(_: None = Depends(require_admin)) -> dict[str, int]:
     with transaction() as tx:
         votes_cur = tx.execute("DELETE FROM votes")
         songs_cur = tx.execute("DELETE FROM songs")
-        # Clearing the deadline reopens voting for the next day.
-        tx.execute("DELETE FROM settings WHERE key = 'voting_deadline'")
+    # Reopen voting with a fresh cutoff: tomorrow at 11:45 office-local time.
+    set_deadline(next_day_deadline())
     return {
         "deleted_songs": songs_cur.rowcount,
         "deleted_votes": votes_cur.rowcount,

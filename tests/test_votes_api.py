@@ -18,11 +18,13 @@ def test_vote_toggles_on_then_off(client, httpx_mock):
 
     response = client.post(f"/api/songs/{song_id}/vote", headers=voter)
     assert response.status_code == 200
-    assert response.json() == {"id": song_id, "did_i_vote": True, "votes": 1}
+    # v-1's vote from adding it, plus v-2's upvote.
+    assert response.json() == {"id": song_id, "did_i_vote": True, "votes": 2}
 
     response = client.post(f"/api/songs/{song_id}/vote", headers=voter)
     assert response.status_code == 200
-    assert response.json() == {"id": song_id, "did_i_vote": False, "votes": 0}
+    # v-2 toggled off; v-1's adder vote remains.
+    assert response.json() == {"id": song_id, "did_i_vote": False, "votes": 1}
 
 
 def test_vote_on_missing_song_404(client):

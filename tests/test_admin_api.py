@@ -52,7 +52,8 @@ def test_reset_wipes_songs_and_votes(client, httpx_mock, monkeypatch):
 
     response = client.post("/api/reset", headers={"X-Admin-Token": "s3cret"})
     assert response.status_code == 200
-    assert response.json() == {"deleted_songs": 1, "deleted_votes": 1}
+    # v-1's vote from adding it, plus v-x's upvote.
+    assert response.json() == {"deleted_songs": 1, "deleted_votes": 2}
 
     listing = client.get("/api/songs", headers=_headers()).json()
     assert listing == []

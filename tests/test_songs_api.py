@@ -51,7 +51,8 @@ def test_add_duplicate_upvotes_existing(client, httpx_mock):
 
     listing = client.get("/api/songs", headers=_headers("v-2", "Dan")).json()
     matching = next(row for row in listing if row["id"] == first_id)
-    assert matching["votes"] == 1
+    # v-1's vote from adding it, plus v-2's upvote.
+    assert matching["votes"] == 2
     assert matching["did_i_vote"] is True
 
 
@@ -73,9 +74,10 @@ def test_list_songs_sorted_by_votes_then_added_at(client, httpx_mock):
 
     listing = client.get("/api/songs", headers=_headers("v-9", "Sam")).json()
     assert listing[0]["id"] == b["id"]
-    assert listing[0]["votes"] == 1
+    # b: v-1's vote from adding it, plus v-2's upvote. a: just v-1's vote from adding it.
+    assert listing[0]["votes"] == 2
     assert listing[1]["id"] == a["id"]
-    assert listing[1]["votes"] == 0
+    assert listing[1]["votes"] == 1
     assert all(row["did_i_vote"] is False for row in listing)
 
 
@@ -93,6 +95,7 @@ def test_list_songs_anonymous_read_is_public(client, httpx_mock):
     assert response.status_code == 200
     listing = response.json()
     matching = next(row for row in listing if row["id"] == song["id"])
-    assert matching["votes"] == 1
+    # v-1's vote from adding it, plus v-2's upvote.
+    assert matching["votes"] == 2
     # Anonymous reader has no voter_id, so did_i_vote is always False.
     assert matching["did_i_vote"] is False
