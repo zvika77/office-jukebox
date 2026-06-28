@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
-from app.voting import set_deadline
+from app.voting import get_deadline, set_deadline
 
 
 def _headers(voter_id: str = "v-1", name: str = "Maya") -> dict:
@@ -78,8 +79,13 @@ def test_vote_allowed_before_deadline(client, httpx_mock):
     assert response.status_code == 200
 
 
-def test_reset_clears_deadline(client, monkeypatch):
+def test_reset_sets_next_day_deadline_at_1145_office_time(client, monkeypatch):
     monkeypatch.setenv("ADMIN_TOKEN", "s3cret")
     set_deadline(datetime.now(timezone.utc) - timedelta(minutes=1))
     client.post("/api/reset", headers={"X-Admin-Token": "s3cret"})
-    assert client.get("/api/voting-deadline").json()["deadline"] is None
+
+    office_tz = ZoneInfo("Asia/Jerusalem")
+    local_deadline = get_deadline().astimezone(office_tz)
+    expected_date = (datetime.now(office_tz) + timedelta(days=1)).date()
+    assert local_deadline.date() == expected_date
+    assert (local_deadline.hour, local_deadline.minute) == (11, 45)

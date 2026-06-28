@@ -5,11 +5,15 @@ Stored in the settings table as an ISO-8601 UTC timestamp under the
 The server clock — not the client's — is the source of truth for open/closed.
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 from app.db import get_connection, transaction
 
 _KEY = "voting_deadline"
+_OFFICE_TZ = ZoneInfo("Asia/Jerusalem")
+_RESET_HOUR = 11
+_RESET_MINUTE = 45
 
 
 def get_deadline() -> datetime | None:
@@ -40,6 +44,16 @@ def set_deadline(dt: datetime | None) -> None:
             "ON CONFLICT (key) DO UPDATE SET value = excluded.value",
             (_KEY, iso),
         )
+
+
+def next_day_deadline() -> datetime:
+    """Tomorrow at 11:45 office-local time (Asia/Jerusalem), as a UTC datetime."""
+    tomorrow = (datetime.now(_OFFICE_TZ) + timedelta(days=1)).date()
+    local_dt = datetime(
+        tomorrow.year, tomorrow.month, tomorrow.day,
+        _RESET_HOUR, _RESET_MINUTE, tzinfo=_OFFICE_TZ,
+    )
+    return local_dt.astimezone(timezone.utc)
 
 
 def voting_is_open() -> bool:
