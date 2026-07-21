@@ -2,6 +2,7 @@ let _deadline = null;        // Date, or null when voting is open forever
 let _serverOffsetMs = 0;     // server clock minus this device's clock
 let _votingOpen = true;      // false once the deadline passes
 let _latestSongs = [];       // last songs payload, for re-render on tick/state flip
+let _expandedSongId = null;  // song whose preview player is open, or null
 
 // Headers for write requests: attach the Google session JWT as a Bearer token.
 async function authHeaders() {
@@ -31,7 +32,20 @@ async function loadSongs() {
     const response = await fetch("/api/songs", { headers: await readHeaders() });
     if (!response.ok) return;
     const songs = await response.json();
-    renderSongs(songs);
+    _latestSongs = songs;
+    if (_expandedSongId && !songs.some((s) => s.id === _expandedSongId)) {
+        _expandedSongId = null; // the previewed song was removed/reset
+    }
+    // Skip the rebuild while a preview iframe is open — recreating the DOM
+    // every 4s would tear down and restart the embedded player mid-watch.
+    if (_expandedSongId === null) {
+        renderSongs(songs);
+    }
+}
+
+function togglePreview(songId) {
+    _expandedSongId = _expandedSongId === songId ? null : songId;
+    renderSongs(_latestSongs);
 }
 
 function serverNow() {
@@ -111,10 +125,14 @@ function renderSongs(songs) {
     list.forEach((song, i) => {
         const card = document.createElement("div");
         card.className = "song-card" + (i < 3 ? " top3" : "");
+        const thumbWrap = document.createElement("div");
+        thumbWrap.className = "thumb-wrap";
+        thumbWrap.addEventListener("click", () => togglePreview(song.id));
         const img = document.createElement("img");
         img.src = song.thumbnail_url;
         img.loading = "lazy";
-        card.appendChild(img);
+        thumbWrap.appendChild(img);
+        card.appendChild(thumbWrap);
         const meta = document.createElement("div");
         meta.className = "meta";
         meta.innerHTML = `
@@ -131,6 +149,19 @@ function renderSongs(songs) {
             card.appendChild(btn);
         }
         container.appendChild(card);
+
+        if (_expandedSongId === song.id) {
+            const preview = document.createElement("div");
+            preview.className = "song-preview";
+            const iframe = document.createElement("iframe");
+            iframe.src = `https://www.youtube.com/embed/${song.youtube_id}`;
+            iframe.title = song.title;
+            iframe.allow = "accelerometer; encrypted-media; gyroscope; picture-in-picture; web-share";
+            iframe.allowFullscreen = true;
+            iframe.loading = "lazy";
+            preview.appendChild(iframe);
+            container.appendChild(preview);
+        }
     });
 }
 
