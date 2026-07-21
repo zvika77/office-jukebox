@@ -13,7 +13,7 @@ from pydantic import BaseModel
 from app.admin import require_admin
 from app.db import get_connection, transaction
 from app.auth import Identity, optional_identity, require_identity
-from app.seed_data import QUICK_ADDS, thumbnail_for
+from app.seed_data import FAVORITES, QUICK_ADDS, thumbnail_for
 from app.voting import get_deadline, next_day_deadline, set_deadline, voting_is_open
 from app.youtube import (
     YouTubeAPIError,
@@ -64,6 +64,25 @@ def seed_quick_adds() -> None:
             )
 
 
+def seed_favorites() -> None:
+    """Seed the Hall of Fame starter set only when the table is empty."""
+    with get_connection() as conn:
+        count = conn.execute("SELECT COUNT(*) AS n FROM favorites").fetchone()["n"]
+    if count > 0:
+        return
+    with transaction() as tx:
+        for entry in FAVORITES:
+            tx.execute(
+                "INSERT INTO favorites (youtube_id, title, thumbnail_url) "
+                "VALUES (%s, %s, %s) ON CONFLICT (youtube_id) DO NOTHING",
+                (
+                    entry["youtube_id"],
+                    entry["title"],
+                    thumbnail_for(entry["youtube_id"]),
+                ),
+            )
+
+
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -86,6 +105,17 @@ def list_quick_adds() -> list[dict]:
     with get_connection() as conn:
         rows = conn.execute(
             "SELECT youtube_id, title, thumbnail_url, decade FROM quick_adds ORDER BY decade, title"
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
+@app.get("/api/favorites")
+def list_favorites() -> list[dict]:
+    """The Hall of Fame: most-loved songs across all days. Public read."""
+    with get_connection() as conn:
+        rows = conn.execute(
+            "SELECT youtube_id, title, thumbnail_url, love_score "
+            "FROM favorites ORDER BY love_score DESC, title ASC LIMIT 12"
         ).fetchall()
     return [dict(row) for row in rows]
 
@@ -331,6 +361,25 @@ def play(_: None = Depends(require_admin)) -> dict:
 @app.post("/api/reset")
 def reset_day(_: None = Depends(require_admin)) -> dict[str, int]:
     with transaction() as tx:
+        # Roll the day's results into the Hall of Fame before wiping: each song's
+        # accumulated votes add to its love_score, and times_added ticks up. Title
+        # and thumbnail are refreshed to the latest seen.
+        tx.execute(
+            """
+            INSERT INTO favorites AS f
+                (youtube_id, title, thumbnail_url, love_score, times_added, last_loved)
+            SELECT s.youtube_id, s.title, s.thumbnail_url, COUNT(v.voter_id), 1, now()
+            FROM songs s
+            LEFT JOIN votes v ON v.song_id = s.id
+            GROUP BY s.youtube_id, s.title, s.thumbnail_url
+            ON CONFLICT (youtube_id) DO UPDATE SET
+                love_score    = f.love_score + EXCLUDED.love_score,
+                times_added   = f.times_added + 1,
+                title         = EXCLUDED.title,
+                thumbnail_url = EXCLUDED.thumbnail_url,
+                last_loved    = now()
+            """
+        )
         votes_cur = tx.execute("DELETE FROM votes")
         songs_cur = tx.execute("DELETE FROM songs")
     # Reopen voting with a fresh cutoff: tomorrow at 11:45 office-local time.

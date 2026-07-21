@@ -17,7 +17,7 @@ os.environ["DATABASE_URL"] = TEST_DSN
 
 from app.auth import Identity, optional_identity, require_identity  # noqa: E402
 from app.db import apply_schema  # noqa: E402
-from app.main import app, seed_quick_adds  # noqa: E402
+from app.main import app, seed_favorites, seed_quick_adds  # noqa: E402
 
 
 # Endpoint tests inject identity through X-Voter-Id / X-Display-Name headers
@@ -44,7 +44,7 @@ def _fake_optional(
 app.dependency_overrides[require_identity] = _fake_required
 app.dependency_overrides[optional_identity] = _fake_optional
 
-_TABLES = "songs, votes, quick_adds, settings"
+_TABLES = "songs, votes, quick_adds, settings, favorites"
 
 
 def _connect_or_skip() -> psycopg.Connection:
@@ -68,6 +68,7 @@ def db(_schema):
     conn.execute(f"TRUNCATE {_TABLES} RESTART IDENTITY CASCADE")
     conn.close()
     seed_quick_adds()
+    seed_favorites()
     yield
 
 

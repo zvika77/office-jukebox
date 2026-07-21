@@ -12,7 +12,7 @@ non-empty.
 import psycopg
 
 from app.db import _dsn, apply_schema
-from app.main import seed_quick_adds
+from app.main import seed_favorites, seed_quick_adds
 
 
 def main() -> None:
@@ -20,7 +20,8 @@ def main() -> None:
         apply_schema(conn)
         conn.commit()
     seed_quick_adds()
-    print("Schema applied and quick-adds seeded.")
+    seed_favorites()
+    print("Schema applied and quick-adds + favorites seeded.")
 
 
 if __name__ == "__main__":

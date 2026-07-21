@@ -40,5 +40,25 @@ QUICK_ADDS: list[dict[str, str]] = [
 ]
 
 
+# Curated "Hall of Fame" starter set — timeless, near-universally-loved crowd
+# pleasers. IDs are reused from QUICK_ADDS above (already verified to embed), so
+# there are no broken previews. Seeded at love_score 0: these are placeholders
+# that the office's real accumulated votes overtake over time.
+FAVORITES: list[dict[str, str]] = [
+    {"youtube_id": "I_izvAbhExY", "title": "Bee Gees - Stayin' Alive"},
+    {"youtube_id": "xFrGuyw1V8s", "title": "ABBA - Dancing Queen"},
+    {"youtube_id": "9jK-NcRmVcw", "title": "Journey - Don't Stop Believin'"},
+    {"youtube_id": "djV11Xbc914", "title": "a-ha - Take On Me"},
+    {"youtube_id": "btPJPFnesV4", "title": "Survivor - Eye of the Tiger"},
+    {"youtube_id": "9EcjWd-O4jI", "title": "Earth, Wind & Fire - September"},
+    {"youtube_id": "OPf0YbXqDm0", "title": "Mark Ronson - Uptown Funk"},
+    {"youtube_id": "y6Sxv-sUYtM", "title": "Pharrell Williams - Happy"},
+    {"youtube_id": "fWNaR-rxAic", "title": "Black Eyed Peas - I Gotta Feeling"},
+    {"youtube_id": "iPwM_kLJqLY", "title": "Stevie Wonder - Superstition"},
+    {"youtube_id": "dQw4w9WgXcQ", "title": "Rick Astley - Never Gonna Give You Up"},
+    {"youtube_id": "iYYRH4apXDo", "title": "Aretha Franklin - Respect"},
+]
+
+
 def thumbnail_for(video_id: str) -> str:
     return f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg"

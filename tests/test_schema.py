@@ -22,7 +22,9 @@ def conn():
     except psycopg.OperationalError:
         pytest.skip("No test Postgres reachable at TEST_DATABASE_URL")
     apply_schema(c)  # idempotent — CREATE TABLE IF NOT EXISTS
-    c.execute("TRUNCATE votes, songs, quick_adds, settings RESTART IDENTITY CASCADE")
+    c.execute(
+        "TRUNCATE votes, songs, quick_adds, settings, favorites RESTART IDENTITY CASCADE"
+    )
     yield c
     c.close()
 
@@ -32,7 +34,7 @@ def test_apply_schema_creates_all_tables(conn):
         "SELECT tablename FROM pg_tables WHERE schemaname = 'public'"
     ).fetchall()
     names = {r[0] for r in rows}
-    assert {"songs", "votes", "quick_adds", "settings"} <= names
+    assert {"songs", "votes", "quick_adds", "settings", "favorites"} <= names
 
 
 def test_songs_unique_on_youtube_id(conn):

@@ -5,6 +5,8 @@ let _latestSongs = [];       // last songs payload, for re-render on tick/state 
 let _expandedSongId = null;  // song whose preview player is open, or null
 let _latestQuickAdds = [];   // last quick-add rows, for re-render on toggle
 let _expandedQuickId = null; // quick-add youtube_id whose preview player is open, or null
+let _latestFavorites = [];   // last Hall-of-Fame rows, for re-render on toggle
+let _expandedFavId = null;   // favorite youtube_id whose preview player is open, or null
 
 // Shared inline YouTube preview player, used by both the voting list and quick-add grid.
 function buildPreviewEl(youtubeId, title) {
@@ -236,15 +238,12 @@ async function refreshQuickAdds() {
     }
 }
 
-function toggleQuickPreview(youtubeId) {
-    _expandedQuickId = _expandedQuickId === youtubeId ? null : youtubeId;
-    renderQuickAdds(_latestQuickAdds);
-}
-
-function renderQuickAdds(rows) {
-    _latestQuickAdds = rows;
-    const quickList = document.getElementById("quick-list");
-    quickList.innerHTML = "";
+// Render a grid of tappable song tiles into `container`. Tapping the thumbnail
+// toggles an inline preview (via onToggle); tapping the rest of the card adds
+// the song. Shared by the quick-add suggestions and the Most-loved rail.
+// `badgeFor` optionally returns a small label (e.g. a love count) per row.
+function renderTileGrid(container, rows, expandedId, onToggle, badgeFor) {
+    container.innerHTML = "";
     rows.forEach((row) => {
         const card = document.createElement("div");
         card.className = "card";
@@ -252,7 +251,7 @@ function renderQuickAdds(rows) {
         thumbWrap.className = "thumb-wrap";
         thumbWrap.addEventListener("click", (e) => {
             e.stopPropagation(); // preview the clip without also triggering the card's add-click
-            toggleQuickPreview(row.youtube_id);
+            onToggle(row.youtube_id);
         });
         const img = document.createElement("img");
         img.src = row.thumbnail_url;
@@ -262,15 +261,37 @@ function renderQuickAdds(rows) {
         const title = document.createElement("div");
         title.textContent = row.title;
         card.appendChild(title);
+        const badge = badgeFor ? badgeFor(row) : "";
+        if (badge) {
+            const badgeEl = document.createElement("div");
+            badgeEl.className = "love-badge";
+            badgeEl.textContent = badge;
+            card.appendChild(badgeEl);
+        }
         card.addEventListener("click", () =>
             addByUrl(`https://www.youtube.com/watch?v=${row.youtube_id}`)
         );
-        quickList.appendChild(card);
+        container.appendChild(card);
 
-        if (_expandedQuickId === row.youtube_id) {
-            quickList.appendChild(buildPreviewEl(row.youtube_id, row.title));
+        if (expandedId === row.youtube_id) {
+            container.appendChild(buildPreviewEl(row.youtube_id, row.title));
         }
     });
+}
+
+function toggleQuickPreview(youtubeId) {
+    _expandedQuickId = _expandedQuickId === youtubeId ? null : youtubeId;
+    renderQuickAdds(_latestQuickAdds);
+}
+
+function renderQuickAdds(rows) {
+    _latestQuickAdds = rows;
+    renderTileGrid(
+        document.getElementById("quick-list"),
+        rows,
+        _expandedQuickId,
+        toggleQuickPreview,
+    );
 }
 
 async function loadQuickAdds() {
@@ -278,6 +299,29 @@ async function loadQuickAdds() {
     if (!response.ok) return;
     const rows = await response.json();
     renderQuickAdds(rows);
+}
+
+function toggleFavPreview(youtubeId) {
+    _expandedFavId = _expandedFavId === youtubeId ? null : youtubeId;
+    renderFavorites(_latestFavorites);
+}
+
+function renderFavorites(rows) {
+    _latestFavorites = rows;
+    renderTileGrid(
+        document.getElementById("favorites-list"),
+        rows,
+        _expandedFavId,
+        toggleFavPreview,
+        (row) => (row.love_score > 0 ? `❤ ${row.love_score}` : ""),
+    );
+}
+
+async function loadFavorites() {
+    const response = await fetch("/api/favorites");
+    if (!response.ok) return;
+    const rows = await response.json();
+    renderFavorites(rows);
 }
 
 function setupAddRow() {
@@ -309,6 +353,7 @@ function startApp() {
     document.getElementById("who-am-i").textContent = user ? user.name : "";
     setupAddRow();
     setupSignOut();
+    loadFavorites();
     loadQuickAdds();
     loadSongs();
     loadDeadline();
