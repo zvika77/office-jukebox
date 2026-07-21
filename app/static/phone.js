@@ -3,6 +3,22 @@ let _serverOffsetMs = 0;     // server clock minus this device's clock
 let _votingOpen = true;      // false once the deadline passes
 let _latestSongs = [];       // last songs payload, for re-render on tick/state flip
 let _expandedSongId = null;  // song whose preview player is open, or null
+let _latestQuickAdds = [];   // last quick-add rows, for re-render on toggle
+let _expandedQuickId = null; // quick-add youtube_id whose preview player is open, or null
+
+// Shared inline YouTube preview player, used by both the voting list and quick-add grid.
+function buildPreviewEl(youtubeId, title) {
+    const preview = document.createElement("div");
+    preview.className = "song-preview";
+    const iframe = document.createElement("iframe");
+    iframe.src = `https://www.youtube.com/embed/${youtubeId}`;
+    iframe.title = title;
+    iframe.allow = "accelerometer; encrypted-media; gyroscope; picture-in-picture; web-share";
+    iframe.allowFullscreen = true;
+    iframe.loading = "lazy";
+    preview.appendChild(iframe);
+    return preview;
+}
 
 // Headers for write requests: attach the Google session JWT as a Bearer token.
 async function authHeaders() {
@@ -151,16 +167,7 @@ function renderSongs(songs) {
         container.appendChild(card);
 
         if (_expandedSongId === song.id) {
-            const preview = document.createElement("div");
-            preview.className = "song-preview";
-            const iframe = document.createElement("iframe");
-            iframe.src = `https://www.youtube.com/embed/${song.youtube_id}`;
-            iframe.title = song.title;
-            iframe.allow = "accelerometer; encrypted-media; gyroscope; picture-in-picture; web-share";
-            iframe.allowFullscreen = true;
-            iframe.loading = "lazy";
-            preview.appendChild(iframe);
-            container.appendChild(preview);
+            container.appendChild(buildPreviewEl(song.youtube_id, song.title));
         }
     });
 }
@@ -229,16 +236,29 @@ async function refreshQuickAdds() {
     }
 }
 
+function toggleQuickPreview(youtubeId) {
+    _expandedQuickId = _expandedQuickId === youtubeId ? null : youtubeId;
+    renderQuickAdds(_latestQuickAdds);
+}
+
 function renderQuickAdds(rows) {
+    _latestQuickAdds = rows;
     const quickList = document.getElementById("quick-list");
     quickList.innerHTML = "";
     rows.forEach((row) => {
         const card = document.createElement("div");
         card.className = "card";
+        const thumbWrap = document.createElement("div");
+        thumbWrap.className = "thumb-wrap";
+        thumbWrap.addEventListener("click", (e) => {
+            e.stopPropagation(); // preview the clip without also triggering the card's add-click
+            toggleQuickPreview(row.youtube_id);
+        });
         const img = document.createElement("img");
         img.src = row.thumbnail_url;
         img.loading = "lazy";
-        card.appendChild(img);
+        thumbWrap.appendChild(img);
+        card.appendChild(thumbWrap);
         const title = document.createElement("div");
         title.textContent = row.title;
         card.appendChild(title);
@@ -246,6 +266,10 @@ function renderQuickAdds(rows) {
             addByUrl(`https://www.youtube.com/watch?v=${row.youtube_id}`)
         );
         quickList.appendChild(card);
+
+        if (_expandedQuickId === row.youtube_id) {
+            quickList.appendChild(buildPreviewEl(row.youtube_id, row.title));
+        }
     });
 }
 

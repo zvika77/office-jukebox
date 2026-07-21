@@ -15,20 +15,22 @@
         .add-row button { padding: 12px 16px; border-radius: 8px; border: none; background: var(--accent); color: white; }
         .quick-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; margin-bottom: 16px; }
         .quick-list .card { background: var(--card); padding: 8px; border-radius: 8px; cursor: pointer; text-align: center; font-size: 0.85rem; }
-        .quick-list .card img { width: 100%; border-radius: 4px; }
+        .quick-list .card .thumb-wrap { width: 100%; margin-bottom: 4px; }
+        .quick-list .song-preview { grid-column: 1 / -1; }
         .song-card { display: flex; gap: 12px; align-items: center; background: var(--card); padding: 12px; border-radius: 8px; margin-bottom: 8px; }
         .song-card.top3 { border-left: 4px solid var(--podium); }
         .countdown-banner { padding: 12px 16px; border-radius: 8px; margin: 12px 0; text-align: center; font-weight: 600; }
         .countdown-banner.open { background: #58a6ff22; color: var(--accent); }
         .countdown-banner.closed { background: #c9302c22; color: #ff8e8e; }
         .countdown-banner .time { font-family: monospace; font-size: 1.4rem; letter-spacing: 1px; }
-        .song-card .thumb-wrap { position: relative; width: 80px; flex-shrink: 0; cursor: pointer; }
-        .song-card .thumb-wrap img { width: 100%; display: block; border-radius: 4px; }
-        .song-card .thumb-wrap::after {
+        .thumb-wrap { position: relative; cursor: pointer; }
+        .thumb-wrap img { width: 100%; display: block; border-radius: 4px; }
+        .thumb-wrap::after {
             content: "\25B6"; position: absolute; inset: 0; display: flex;
             align-items: center; justify-content: center; color: white;
             font-size: 1.1rem; text-shadow: 0 0 4px rgba(0,0,0,0.8); pointer-events: none;
         }
+        .song-card .thumb-wrap { width: 80px; flex-shrink: 0; }
         .song-card .meta { flex: 1; min-width: 0; }
         .song-card .title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
         .song-card .added-by { color: var(--muted); font-size: 0.85rem; }
