@@ -185,7 +185,7 @@ function showPlayer(on) {
 
 function playCurrent() {
     if (queueIndex >= queue.length) {
-        stopPlayback();
+        finishSongs();
         return;
     }
     const song = queue[queueIndex];
@@ -199,6 +199,15 @@ function playCurrent() {
 function advance() {
     queueIndex += 1;
     playCurrent();
+}
+
+// The song queue is done, but the Tabata may still be running. Keep the player
+// and the timer on screen so everyone can finish the workout — only the explicit
+// Stop button tears things down. Just idle the video and note the songs are done.
+function finishSongs() {
+    if (ytPlayer && ytPlayer.stopVideo) ytPlayer.stopVideo();
+    document.getElementById("now-playing").textContent =
+        "✔ All songs played — finish your Tabata! 💪";
 }
 
 function stopPlayback() {
