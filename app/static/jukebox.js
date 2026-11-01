@@ -34,6 +34,47 @@ function tabataSrc() {
     return `${TABATA_DEFAULT_BASE}?${q.toString()}`;
 }
 
+// Up to two intro songs that play before the top 3 each time Play is hit. The
+// admin pastes a YouTube link into each box; like the timer URL, they're kept
+// in this device's localStorage so they stick across sessions.
+const INTRO_STORAGE_KEYS = ["intro_url_1", "intro_url_2"];
+
+// Mirror of the backend's extract_video_id(): pull the 11-char id from a
+// youtu.be or /watch?v= link so intros accept the same URL shapes as votes.
+const VIDEO_ID_RE = /^[A-Za-z0-9_-]{11}$/;
+const YT_HOSTS = new Set([
+    "youtube.com", "www.youtube.com", "m.youtube.com", "music.youtube.com", "youtu.be",
+]);
+
+function extractVideoId(url) {
+    if (!url) return null;
+    let parsed;
+    try {
+        parsed = new URL(url.trim());
+    } catch {
+        return null;
+    }
+    const host = parsed.hostname.toLowerCase();
+    if (!YT_HOSTS.has(host)) return null;
+    let candidate;
+    if (host === "youtu.be") {
+        candidate = parsed.pathname.replace(/^\/+/, "").split("/")[0];
+    } else {
+        const path = parsed.pathname.replace(/\/+$/, "");
+        if (path !== "/watch" && path !== "") return null;
+        candidate = parsed.searchParams.get("v") ?? "";
+    }
+    return VIDEO_ID_RE.test(candidate) ? candidate : null;
+}
+
+// The saved intros as queue entries, in order, dropping empty/unrecognized boxes.
+function introQueue() {
+    return INTRO_STORAGE_KEYS
+        .map((key) => extractVideoId(localStorage.getItem(key) ?? ""))
+        .filter(Boolean)
+        .map((youtube_id, i) => ({ youtube_id, title: `Intro ${i + 1}` }));
+}
+
 // The Tabata page won't reflow into a narrow column — it keeps its wide layout
 // and clips. So render it at this fixed logical width and scale the whole frame
 // down to fit the pane. Bump this down to make the timer appear larger.
@@ -217,6 +258,27 @@ function stopPlayback() {
     queueIndex = 0;
 }
 
+function togglePause() {
+    if (!ytPlayer || !ytPlayer.getPlayerState) return;
+    if (ytPlayer.getPlayerState() === YT.PlayerState.PLAYING) {
+        ytPlayer.pauseVideo();
+    } else {
+        ytPlayer.playVideo();
+    }
+}
+
+// Reflect whatever the player is actually doing on the Pause/Resume button,
+// whether it was toggled here or changed on its own.
+function syncPauseButton(state) {
+    const btn = document.getElementById("btn-pause");
+    if (!btn) return;
+    if (state === YT.PlayerState.PAUSED) {
+        btn.innerHTML = "&#9654; Resume";
+    } else if (state === YT.PlayerState.PLAYING) {
+        btn.innerHTML = "&#9208; Pause";
+    }
+}
+
 function showToast(message) {
     const toast = document.createElement("div");
     toast.textContent = message;
@@ -234,6 +296,7 @@ window.onYouTubeIframeAPIReady = function () {
         events: {
             onStateChange: (e) => {
                 if (e.data === YT.PlayerState.ENDED) advance();
+                syncPauseButton(e.data);
             },
             onError: () => {
                 showToast("⚠️ couldn't play that one — skipping");
@@ -251,8 +314,9 @@ async function startPlayback() {
     });
     if (!response.ok) return;
     const body = await response.json();
+    // No top songs yet means no session — don't play intros on their own.
     if (body.queue.length === 0) return;
-    queue = body.queue;
+    queue = [...introQueue(), ...body.queue];
     queueIndex = 0;
     showPlayer(true);
     playCurrent();
@@ -289,6 +353,7 @@ function setupAdmin() {
         await fetch("/api/reset", { method: "POST", headers: { "X-Admin-Token": adminToken } });
     });
     document.getElementById("btn-set-deadline").addEventListener("click", setDeadline);
+    document.getElementById("btn-pause").addEventListener("click", togglePause);
     document.getElementById("btn-skip").addEventListener("click", advance);
     document.getElementById("btn-stop").addEventListener("click", stopPlayback);
 
@@ -299,6 +364,24 @@ function setupAdmin() {
         if (!url) return;
         localStorage.setItem(TABATA_STORAGE_KEY, url);
         showToast("Timer URL saved");
+    });
+
+    // Prefill the intro boxes with whatever's saved, and persist on Save.
+    INTRO_STORAGE_KEYS.forEach((key, i) => {
+        document.getElementById(`intro-url-${i + 1}`).value = localStorage.getItem(key) ?? "";
+    });
+    document.getElementById("btn-save-intros").addEventListener("click", () => {
+        let unrecognized = false;
+        INTRO_STORAGE_KEYS.forEach((key, i) => {
+            const url = document.getElementById(`intro-url-${i + 1}`).value.trim();
+            if (url) {
+                localStorage.setItem(key, url);
+                if (!extractVideoId(url)) unrecognized = true;
+            } else {
+                localStorage.removeItem(key);
+            }
+        });
+        showToast(unrecognized ? "Saved, but a link isn't a recognized YouTube URL" : "Intro songs saved");
     });
 }
 
